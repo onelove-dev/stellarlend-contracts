@@ -52,6 +52,7 @@ use cross_asset::{
 #[contract]
 pub struct HelloContract;
 
+#[allow(clippy::too_many_arguments)]
 #[contractimpl]
 #[allow(clippy::too_many_arguments)] // Allow for generated client functions with many parameters
 impl HelloContract {
