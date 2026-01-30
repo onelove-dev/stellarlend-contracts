@@ -27,6 +27,7 @@ mod analytics;
 use analytics::{
     generate_protocol_report, generate_user_report, get_recent_activity, get_user_activity_feed,
     AnalyticsError, ProtocolReport, UserReport,
+};
 mod cross_asset;
 use cross_asset::{
     cross_asset_borrow, cross_asset_deposit, cross_asset_repay, cross_asset_withdraw,
