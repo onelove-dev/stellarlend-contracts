@@ -209,6 +209,7 @@ fn get_protocol_analytics(env: &Env, contract_id: &Address) -> Option<deposit::P
 }
 
 /// Helper function to get user collateral balance
+#[allow(dead_code)]
 fn get_collateral_balance(env: &Env, contract_id: &Address, user: &Address) -> i128 {
     env.as_contract(contract_id, || {
         let key = DepositDataKey::CollateralBalance(user.clone());
@@ -244,8 +245,8 @@ fn set_asset_params(
 fn set_pause_borrow(env: &Env, contract_id: &Address, paused: bool) {
     env.as_contract(contract_id, || {
         let pause_key = DepositDataKey::PauseSwitches;
-        let mut pause_map = Map::new(&env);
-        pause_map.set(Symbol::new(&env, "pause_borrow"), paused);
+        let mut pause_map = Map::new(env);
+        pause_map.set(Symbol::new(env, "pause_borrow"), paused);
         env.storage().persistent().set(&pause_key, &pause_map);
     });
 }
@@ -269,6 +270,7 @@ fn calculate_expected_max_borrow(collateral: i128, collateral_factor: i128) -> i
 }
 
 /// Setup contract with user having collateral
+#[allow(dead_code)]
 fn setup_contract_with_collateral<'a>(
     env: &'a Env,
     contract_id: &'a Address,
@@ -285,7 +287,7 @@ fn setup_contract_with_collateral<'a>(
 // ============================================================================
 
 /// Test basic successful borrow with sufficient collateral
-/// 
+///
 /// Scenario: User deposits collateral and borrows an amount within limits.
 /// Expected: Borrow succeeds, position updated, events emitted.
 #[test]
@@ -320,7 +322,7 @@ fn test_borrow_asset_success_basic() {
 }
 
 /// Test borrow at maximum limit (exactly at collateral ratio threshold)
-/// 
+///
 /// Scenario: User borrows exactly the maximum allowed amount.
 /// Expected: Borrow succeeds at the boundary condition.
 #[test]
@@ -348,7 +350,7 @@ fn test_borrow_asset_at_maximum_limit() {
 }
 
 /// Test multiple sequential borrows within limits
-/// 
+///
 /// Scenario: User makes multiple borrows, each within remaining capacity.
 /// Expected: Each borrow succeeds, debt accumulates correctly.
 #[test]
@@ -381,7 +383,7 @@ fn test_borrow_asset_multiple_sequential_borrows() {
 }
 
 /// Test borrow with existing debt (interest accrual scenario)
-/// 
+///
 /// Scenario: User borrows, then borrows again. Interest should accrue on first borrow.
 /// Expected: Second borrow accrues interest on existing debt before adding new debt.
 #[test]
@@ -426,7 +428,7 @@ fn test_borrow_asset_with_existing_debt() {
 }
 
 /// Test borrow after partial repayment
-/// 
+///
 /// Scenario: User borrows, repays partially, then borrows again.
 /// Expected: New borrow succeeds, debt correctly calculated.
 #[test]
@@ -460,7 +462,7 @@ fn test_borrow_asset_after_partial_repayment() {
 }
 
 /// Test borrow with different collateral factors
-/// 
+///
 /// Scenario: User borrows with asset having 75% collateral factor.
 /// Expected: Max borrow is reduced proportionally to collateral factor.
 #[test]
@@ -497,7 +499,7 @@ fn test_borrow_asset_with_different_collateral_factor() {
 // ============================================================================
 
 /// Test borrow with zero amount
-/// 
+///
 /// Scenario: User attempts to borrow zero amount.
 /// Expected: Returns BorrowError::InvalidAmount.
 #[test]
@@ -517,7 +519,7 @@ fn test_borrow_asset_zero_amount() {
 }
 
 /// Test borrow with negative amount
-/// 
+///
 /// Scenario: User attempts to borrow negative amount.
 /// Expected: Returns BorrowError::InvalidAmount.
 #[test]
@@ -537,7 +539,7 @@ fn test_borrow_asset_negative_amount() {
 }
 
 /// Test borrow with invalid asset (contract address itself)
-/// 
+///
 /// Scenario: User attempts to borrow using contract address as asset.
 /// Expected: Returns BorrowError::InvalidAsset.
 #[test]
@@ -557,7 +559,7 @@ fn test_borrow_asset_invalid_asset_contract_address() {
 }
 
 /// Test borrow without collateral
-/// 
+///
 /// Scenario: User attempts to borrow without depositing collateral.
 /// Expected: Returns BorrowError::InsufficientCollateral.
 #[test]
@@ -574,7 +576,7 @@ fn test_borrow_asset_no_collateral() {
 }
 
 /// Test borrow exceeds collateral ratio
-/// 
+///
 /// Scenario: User attempts to borrow more than allowed by collateral ratio.
 /// Expected: Returns BorrowError::MaxBorrowExceeded or InsufficientCollateralRatio.
 #[test]
@@ -597,7 +599,7 @@ fn test_borrow_asset_exceeds_collateral_ratio() {
 }
 
 /// Test borrow exceeds maximum borrowable amount
-/// 
+///
 /// Scenario: User borrows, then attempts to borrow more than remaining capacity.
 /// Expected: Returns BorrowError::MaxBorrowExceeded.
 #[test]
@@ -625,7 +627,7 @@ fn test_borrow_asset_max_borrow_exceeded() {
 }
 
 /// Test borrow when asset not enabled
-/// 
+///
 /// Scenario: User attempts to borrow asset that is not enabled (deposit_enabled = false).
 /// Expected: Returns BorrowError::AssetNotEnabled.
 #[test]
@@ -653,7 +655,7 @@ fn test_borrow_asset_not_enabled() {
 // ============================================================================
 
 /// Test interest accrues on existing debt before new borrow
-/// 
+///
 /// Scenario: User has existing debt, then borrows more. Interest should accrue first.
 /// Expected: Interest accrued on existing debt, then new debt added.
 #[test]
@@ -705,7 +707,7 @@ fn test_borrow_interest_accrues_on_existing_debt() {
 }
 
 /// Test interest calculation with different time periods
-/// 
+///
 /// Scenario: Interest accrues differently based on time elapsed.
 /// Expected: More time = more interest accrued.
 #[test]
@@ -761,7 +763,7 @@ fn test_borrow_interest_calculation_time_based() {
 }
 
 /// Test interest resets when debt becomes zero
-/// 
+///
 /// Scenario: User borrows, repays fully, then borrows again.
 /// Expected: Interest resets to zero when debt is zero.
 #[test]
@@ -797,7 +799,7 @@ fn test_borrow_interest_resets_on_zero_debt() {
 
     // Get position after repayment
     let position_after_repay = get_user_position(&env, &contract_id, &user).unwrap();
-    
+
     // If there's remaining debt (interest), repay it
     if position_after_repay.debt > 0 {
         let remaining = position_after_repay.debt + position_after_repay.borrow_interest;
@@ -820,7 +822,7 @@ fn test_borrow_interest_resets_on_zero_debt() {
 // ============================================================================
 
 /// Test borrow fails when paused
-/// 
+///
 /// Scenario: Borrow operations are paused via pause switch.
 /// Expected: Returns BorrowError::BorrowPaused.
 #[test]
@@ -843,7 +845,7 @@ fn test_borrow_asset_paused() {
 }
 
 /// Test borrow succeeds when not paused
-/// 
+///
 /// Scenario: Borrow operations are not paused.
 /// Expected: Borrow succeeds normally.
 #[test]
@@ -869,7 +871,7 @@ fn test_borrow_asset_not_paused() {
 }
 
 /// Test borrow succeeds when pause map doesn't exist
-/// 
+///
 /// Scenario: Pause switches map doesn't exist in storage.
 /// Expected: Borrow succeeds (no pause check fails).
 #[test]
@@ -893,7 +895,7 @@ fn test_borrow_asset_no_pause_map() {
 }
 
 /// Test borrow succeeds after pause is removed
-/// 
+///
 /// Scenario: Borrow is paused, then unpaused.
 /// Expected: Borrow fails when paused, succeeds when unpaused.
 #[test]
@@ -926,7 +928,7 @@ fn test_borrow_asset_after_pause_removed() {
 // ============================================================================
 
 /// Test BorrowEvent is emitted with correct data
-/// 
+///
 /// Scenario: User borrows assets.
 /// Expected: BorrowEvent emitted with correct user, asset, amount, timestamp.
 #[test]
@@ -954,7 +956,7 @@ fn test_borrow_event_emitted() {
 }
 
 /// Test position updated event is emitted
-/// 
+///
 /// Scenario: User borrows, position changes.
 /// Expected: PositionUpdatedEvent emitted.
 #[test]
@@ -978,7 +980,7 @@ fn test_borrow_position_updated_event() {
 }
 
 /// Test analytics updated event is emitted
-/// 
+///
 /// Scenario: User borrows, analytics change.
 /// Expected: AnalyticsUpdatedEvent emitted.
 #[test]
@@ -1006,7 +1008,7 @@ fn test_borrow_analytics_updated_event() {
 // ============================================================================
 
 /// Test borrow exactly at max borrowable amount (boundary)
-/// 
+///
 /// Scenario: User borrows exactly the maximum allowed amount.
 /// Expected: Borrow succeeds at boundary.
 #[test]
@@ -1033,7 +1035,7 @@ fn test_borrow_asset_exact_max_boundary() {
 }
 
 /// Test borrow 1 unit below max (should succeed)
-/// 
+///
 /// Scenario: User borrows 1 unit less than maximum.
 /// Expected: Borrow succeeds.
 #[test]
@@ -1061,7 +1063,7 @@ fn test_borrow_asset_one_below_max() {
 }
 
 /// Test borrow 1 unit above max (should fail)
-/// 
+///
 /// Scenario: User attempts to borrow 1 unit more than maximum.
 /// Expected: Returns BorrowError::MaxBorrowExceeded.
 #[test]
@@ -1086,7 +1088,7 @@ fn test_borrow_asset_one_above_max() {
 }
 
 /// Test borrow with very small amount (1 unit)
-/// 
+///
 /// Scenario: User borrows minimum amount (1 unit).
 /// Expected: Borrow succeeds.
 #[test]
@@ -1110,7 +1112,7 @@ fn test_borrow_asset_very_small_amount() {
 }
 
 /// Test multiple users borrowing simultaneously
-/// 
+///
 /// Scenario: Multiple users borrow at the same time.
 /// Expected: Each user's position is tracked independently.
 #[test]
@@ -1152,7 +1154,7 @@ fn test_borrow_asset_multiple_users() {
 // ============================================================================
 
 /// Test borrow with zero collateral factor
-/// 
+///
 /// Scenario: Asset has 0% collateral factor.
 /// Expected: Max borrow should be zero, borrow should fail.
 #[test]
@@ -1176,7 +1178,7 @@ fn test_borrow_asset_zero_collateral_factor() {
 }
 
 /// Test borrow with very high collateral factor (>100%)
-/// 
+///
 /// Scenario: Asset has >100% collateral factor.
 /// Expected: Max borrow increases proportionally.
 /// Note: Uses native XLM for both deposit and borrow to avoid token contract setup issues.
@@ -1209,7 +1211,7 @@ fn test_borrow_asset_high_collateral_factor() {
 }
 
 /// Test position state consistency
-/// 
+///
 /// Scenario: After borrow, position state should be consistent.
 /// Expected: Position debt, collateral, and timestamps are consistent.
 #[test]
@@ -1243,7 +1245,7 @@ fn test_borrow_position_state_consistency() {
 // ============================================================================
 
 /// Test borrow native XLM (None asset)
-/// 
+///
 /// Scenario: User borrows native XLM.
 /// Expected: Borrow succeeds with None asset.
 #[test]
@@ -1267,7 +1269,7 @@ fn test_borrow_asset_native_xlm() {
 }
 
 /// Test borrow token asset (Address)
-/// 
+///
 /// Scenario: User borrows token asset.
 /// Expected: Borrow succeeds with token address.
 #[test]
@@ -1298,7 +1300,7 @@ fn test_borrow_asset_token() {
 }
 
 /// Test default collateral factor when asset params not found
-/// 
+///
 /// Scenario: User borrows asset without configured parameters.
 /// Expected: Default collateral factor (10000 = 100%) is used.
 #[test]
@@ -1327,7 +1329,7 @@ fn test_borrow_asset_default_collateral_factor() {
 // ============================================================================
 
 /// Test user analytics updated correctly
-/// 
+///
 /// Scenario: User borrows, analytics should update.
 /// Expected: total_borrows, debt_value, collateralization_ratio updated.
 #[test]
@@ -1357,7 +1359,7 @@ fn test_borrow_user_analytics_updated() {
 }
 
 /// Test protocol analytics updated correctly
-/// 
+///
 /// Scenario: User borrows, protocol analytics should update.
 /// Expected: total_borrows incremented.
 #[test]
@@ -1381,7 +1383,7 @@ fn test_borrow_protocol_analytics_updated() {
 }
 
 /// Test position state updated correctly
-/// 
+///
 /// Scenario: User borrows, position should update.
 /// Expected: debt, last_accrual_time updated.
 #[test]
@@ -1411,7 +1413,7 @@ fn test_borrow_position_state_updated() {
 }
 
 /// Test activity log updated
-/// 
+///
 /// Scenario: User borrows, activity log should be updated.
 /// Expected: Activity log contains borrow entry.
 #[test]
@@ -1443,7 +1445,7 @@ fn test_borrow_activity_log_updated() {
 }
 
 /// Test transaction count incremented
-/// 
+///
 /// Scenario: User borrows, transaction count should increment.
 /// Expected: transaction_count incremented.
 #[test]
@@ -1470,7 +1472,7 @@ fn test_borrow_transaction_count_incremented() {
 }
 
 /// Test last activity timestamp updated
-/// 
+///
 /// Scenario: User borrows, last_activity should update.
 /// Expected: last_activity timestamp updated to current time.
 #[test]
