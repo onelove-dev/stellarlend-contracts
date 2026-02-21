@@ -523,18 +523,17 @@ pub fn emit_user_activity_tracked_event(
 
     env.events().publish(topics, data);
 }
+// Define risk management storage keys locally to avoid dependency
+#[contracttype]
+enum RiskDataKey {
+    RiskConfig,
+    EmergencyPause,
+}
 
 /// Check risk management pause status
 /// This function checks the risk management system's pause switches
 /// by accessing the storage directly to avoid module dependency issues
 fn check_risk_management_pause(env: &Env) -> Result<(), DepositError> {
-    // Define risk management storage keys locally to avoid dependency
-    #[contracttype]
-    enum RiskDataKey {
-        RiskConfig,
-        EmergencyPause,
-    }
-
     // Check emergency pause first
     let emergency_key = RiskDataKey::EmergencyPause;
     if let Some(emergency_paused) = env
