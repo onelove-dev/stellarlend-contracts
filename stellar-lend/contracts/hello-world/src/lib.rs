@@ -689,7 +689,7 @@ impl HelloContract {
         set_emergency_rate_adjustment(&env, caller, adjustment_bps)
     }
 
-    /// Register a bridge 
+    /// Register a bridge
     ///
     /// # Arguments
     /// * `caller` - Admin address for authorization
@@ -707,7 +707,7 @@ impl HelloContract {
     }
 
     /// Set bridge fee
-    /// 
+    ///
     /// # Arguments
     /// * `caller` - Admin address for authorization
     /// * `network_id` - ID of the remote network
