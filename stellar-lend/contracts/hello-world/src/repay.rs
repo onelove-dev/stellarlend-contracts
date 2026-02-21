@@ -34,15 +34,15 @@ pub enum RepayError {
 // Interest rate is now calculated dynamically based on utilization
 // See interest_rate module for details
 /// Calculate interest accrued since last accrual time
-/// 
+///
 /// Uses dynamic interest rate based on current protocol utilization.
-/// 
+///
 /// # Arguments
 /// * `env` - The Soroban environment
 /// * `principal` - The principal amount to calculate interest on
 /// * `last_accrual_time` - The timestamp of the last interest accrual
 /// * `current_time` - The current ledger timestamp
-/// 
+///
 /// # Returns
 /// * `Result<i128, RepayError>` - The accrued interest amount or an error
 fn calculate_accrued_interest(
@@ -74,14 +74,14 @@ fn calculate_accrued_interest(
 }
 
 /// Accrue interest on a position
-/// 
+///
 /// Updates the position's borrow_interest and last_accrual_time based on elapsed time
 /// and the current interest rate.
-/// 
+///
 /// # Arguments
 /// * `env` - The Soroban environment
 /// * `position` - A mutable reference to the user's position
-/// 
+///
 /// # Returns
 /// * `Result<(), RepayError>` - Success or an error
 fn accrue_interest(env: &Env, position: &mut Position) -> Result<(), RepayError> {
@@ -110,10 +110,10 @@ fn accrue_interest(env: &Env, position: &mut Position) -> Result<(), RepayError>
 }
 
 /// Helper function to get the native asset contract address from storage
-/// 
+///
 /// # Arguments
 /// * `env` - The Soroban environment
-/// 
+///
 /// # Returns
 /// * `Result<Address, RepayError>` - The native asset address or an error if not configured
 fn get_native_asset_address(env: &Env) -> Result<Address, RepayError> {
@@ -229,7 +229,7 @@ pub fn repay_debt(
     // Handle asset transfer - user pays the contract
     // We use the determined asset_addr (either token or native)
     let token_client = soroban_sdk::token::Client::new(env, &asset_addr);
-    
+
     // Check user balance
     let user_balance = token_client.balance(&user);
     if user_balance < repay_amount {
@@ -325,13 +325,13 @@ pub fn repay_debt(
 }
 
 /// Update user analytics after repayment
-/// 
+///
 /// # Arguments
 /// * `env` - The Soroban environment
 /// * `user` - The address of the user
 /// * `amount` - The repayment amount
 /// * `timestamp` - The current ledger timestamp
-/// 
+///
 /// # Returns
 /// * `Result<(), RepayError>` - Success or an error
 fn update_user_analytics_repay(
@@ -389,11 +389,11 @@ fn update_user_analytics_repay(
 }
 
 /// Update protocol analytics after repayment
-/// 
+///
 /// # Arguments
 /// * `env` - The Soroban environment
 /// * `amount` - The repayment amount
-/// 
+///
 /// # Returns
 /// * `Result<(), RepayError>` - Success or an error
 fn update_protocol_analytics_repay(env: &Env, amount: i128) -> Result<(), RepayError> {
@@ -409,10 +409,7 @@ fn update_protocol_analytics_repay(env: &Env, amount: i128) -> Result<(), RepayE
         });
 
     // Update total borrows (decrease by repayment amount)
-    analytics.total_borrows = analytics
-        .total_borrows
-        .checked_sub(amount)
-        .unwrap_or(0); // If it underflows, set to 0 (graceful recovery)
+    analytics.total_borrows = analytics.total_borrows.checked_sub(amount).unwrap_or(0); // If it underflows, set to 0 (graceful recovery)
 
     env.storage().persistent().set(&analytics_key, &analytics);
     Ok(())

@@ -2,7 +2,7 @@ use crate::deposit::{DepositDataKey, Position, ProtocolAnalytics, UserAnalytics}
 use crate::{deposit, HelloContract, HelloContractClient};
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
-    Address, Env, Symbol, Map,
+    Address, Env, Map, Symbol,
 };
 
 /// Helper function to create a test environment
@@ -50,20 +50,22 @@ fn test_repay_debt_success_native() {
 
     let user = Address::generate(&env);
     let admin = Address::generate(&env);
-    
+
     // Initialize
     client.initialize(&admin);
 
     // Register and set native asset address
     let native_asset_addr = env.register_stellar_asset_contract(admin.clone());
     env.as_contract(&contract_id, || {
-        env.storage().persistent().set(&DepositDataKey::NativeAssetAddress, &native_asset_addr);
+        env.storage()
+            .persistent()
+            .set(&DepositDataKey::NativeAssetAddress, &native_asset_addr);
     });
 
     // Setup initial position: Deposit and Borrow
     let deposit_amount = 1000;
     client.deposit_collateral(&user, &None, &deposit_amount);
-    
+
     let borrow_amount = 500;
     client.borrow_asset(&user, &None, &borrow_amount);
 
@@ -81,7 +83,8 @@ fn test_repay_debt_success_native() {
 
     // Repay partial debt
     let repay_amount = 200;
-    let (remaining_debt, interest_paid, principal_paid) = client.repay_debt(&user, &None, &repay_amount);
+    let (remaining_debt, interest_paid, principal_paid) =
+        client.repay_debt(&user, &None, &repay_amount);
 
     assert_eq!(principal_paid, repay_amount);
     assert_eq!(interest_paid, 0); // No time elapsed, so 0 interest
@@ -97,7 +100,10 @@ fn test_repay_debt_success_native() {
 
     // Verify protocol analytics
     let protocol_analytics = get_protocol_analytics(&env, &contract_id).unwrap();
-    assert_eq!(protocol_analytics.total_borrows, borrow_amount - repay_amount);
+    assert_eq!(
+        protocol_analytics.total_borrows,
+        borrow_amount - repay_amount
+    );
 }
 
 #[test]
@@ -113,7 +119,9 @@ fn test_repay_full_debt() {
     // Register and set native asset address
     let native_asset_addr = env.register_stellar_asset_contract(admin.clone());
     env.as_contract(&contract_id, || {
-        env.storage().persistent().set(&DepositDataKey::NativeAssetAddress, &native_asset_addr);
+        env.storage()
+            .persistent()
+            .set(&DepositDataKey::NativeAssetAddress, &native_asset_addr);
     });
 
     // Setup initial position
@@ -149,7 +157,9 @@ fn test_repay_no_debt() {
     // Register and set native asset address
     let native_asset_addr = env.register_stellar_asset_contract(admin.clone());
     env.as_contract(&contract_id, || {
-        env.storage().persistent().set(&DepositDataKey::NativeAssetAddress, &native_asset_addr);
+        env.storage()
+            .persistent()
+            .set(&DepositDataKey::NativeAssetAddress, &native_asset_addr);
     });
 
     client.repay_debt(&user, &None, &100);
@@ -159,7 +169,7 @@ fn test_repay_no_debt() {
 fn test_repay_interest_accrual() {
     let env = create_test_env();
     env.ledger().with_mut(|li| li.timestamp = 1000);
-    
+
     let contract_id = env.register(HelloContract, ());
     let client = HelloContractClient::new(&env, &contract_id);
 
@@ -170,9 +180,11 @@ fn test_repay_interest_accrual() {
     // Register and set native asset address
     let native_asset_addr = env.register_stellar_asset_contract(admin.clone());
     env.as_contract(&contract_id, || {
-        env.storage().persistent().set(&DepositDataKey::NativeAssetAddress, &native_asset_addr);
+        env.storage()
+            .persistent()
+            .set(&DepositDataKey::NativeAssetAddress, &native_asset_addr);
     });
-    
+
     // Setup initial position
     client.deposit_collateral(&user, &None, &10000);
     client.borrow_asset(&user, &None, &1000);
@@ -180,19 +192,23 @@ fn test_repay_interest_accrual() {
     // Mint tokens to user for repayment
     let native_token_client = soroban_sdk::token::StellarAssetClient::new(&env, &native_asset_addr);
     native_token_client.mint(&user, &1000);
-    
+
     // Jump forward in time: 1 year (31,536,000 seconds)
     // Borrow rate is approximately 1.25% at 10% utilization (borrows=1000, deposits=10000)
     // 1000 * 0.0125 = 12.5 interest
     env.ledger().with_mut(|li| li.timestamp = 1000 + 31536000);
-    
+
     // Repay some amount
     let repay_amount = 100;
-    let (remaining_debt, interest_paid, principal_paid) = client.repay_debt(&user, &None, &repay_amount);
-    
+    let (remaining_debt, interest_paid, principal_paid) =
+        client.repay_debt(&user, &None, &repay_amount);
+
     assert!(interest_paid > 0, "Interest should have been paid");
     assert_eq!(interest_paid + principal_paid, repay_amount);
-    
+
     let position = get_user_position(&env, &contract_id, &user).unwrap();
-    assert!(position.borrow_interest > 0 || interest_paid == 12, "Interest should be tracked accurately");
+    assert!(
+        position.borrow_interest > 0 || interest_paid == 12,
+        "Interest should be tracked accurately"
+    );
 }
