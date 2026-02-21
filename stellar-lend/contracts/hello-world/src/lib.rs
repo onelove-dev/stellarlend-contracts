@@ -75,6 +75,8 @@ use interest_rate::{
     InterestRateError,
 };
 
+pub mod governance;
+
 /// The StellarLend core contract.
 ///
 /// Provides the public API for all lending protocol operations. Each method

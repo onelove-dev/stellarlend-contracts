@@ -53,6 +53,16 @@ pub enum GovernanceError {
     InsufficientApprovals = 13,
     /// Proposal expired
     ProposalExpired = 14,
+    /// Recovery already in progress
+    RecoveryInProgress = 15,
+    /// No recovery in progress
+    NoRecoveryInProgress = 16,
+    /// Invalid guardian configuration
+    InvalidGuardianConfig = 17,
+    /// Guardian already exists
+    GuardianAlreadyExists = 18,
+    /// Guardian not found
+    GuardianNotFound = 19,
 }
 
 /// Storage keys for governance data
@@ -72,6 +82,14 @@ pub enum GovernanceDataKey {
     ProposalVotes(u64),
     /// Proposal approvals (for multisig): Map<u64, Vec<Address>>
     ProposalApprovals(u64),
+    /// Guardians: Vec<Address>
+    Guardians,
+    /// Guardian threshold (number of approvals required for recovery)
+    GuardianThreshold,
+    /// Recovery request: Option<RecoveryRequest>
+    RecoveryRequest,
+    /// Recovery approvals: Vec<Address>
+    RecoveryApprovals,
 }
 
 /// Proposal status
@@ -114,6 +132,22 @@ pub enum Vote {
     Against,
     /// Abstain
     Abstain,
+}
+
+/// Recovery request structure
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct RecoveryRequest {
+    /// Old admin to be replaced
+    pub old_admin: Address,
+    /// New admin to be set
+    pub new_admin: Address,
+    /// Guardian who initiated the recovery
+    pub initiator: Address,
+    /// Timestamp when recovery was initiated
+    pub initiated_at: u64,
+    /// Expiration timestamp (recovery must be executed before this)
+    pub expires_at: u64,
 }
 
 /// Proposal structure
@@ -769,4 +803,391 @@ fn emit_approval_event(env: &Env, proposal_id: &u64, approver: &Address) {
         approver.clone(),
     );
     env.events().publish(topics, ());
+}
+
+// ============================================================================
+// Social Recovery Operations
+// ============================================================================
+
+const DEFAULT_RECOVERY_PERIOD: u64 = 3 * 24 * 60 * 60; // 3 days in seconds
+
+/// Add a guardian to the recovery system.
+///
+/// Only multisig admins can add guardians. Guardians can initiate and approve
+/// recovery requests to change the admin in case of key loss or compromise.
+///
+/// # Arguments
+/// * `env` - The contract environment
+/// * `caller` - Must be a current multisig admin
+/// * `guardian` - The guardian address to add
+///
+/// # Errors
+/// * `Unauthorized` - Caller is not a multisig admin
+/// * `GuardianAlreadyExists` - Guardian is already in the list
+pub fn add_guardian(env: &Env, caller: Address, guardian: Address) -> Result<(), GovernanceError> {
+    let admins_key = GovernanceDataKey::MultisigAdmins;
+    let admins: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&admins_key)
+        .ok_or(GovernanceError::Unauthorized)?;
+    
+    if !admins.contains(caller.clone()) {
+        return Err(GovernanceError::Unauthorized);
+    }
+    
+    let guardians_key = GovernanceDataKey::Guardians;
+    let mut guardians: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&guardians_key)
+        .unwrap_or(Vec::new(env));
+    
+    if guardians.contains(guardian.clone()) {
+        return Err(GovernanceError::GuardianAlreadyExists);
+    }
+    
+    guardians.push_back(guardian.clone());
+    env.storage().persistent().set(&guardians_key, &guardians);
+    
+    emit_guardian_added_event(env, &guardian);
+    Ok(())
+}
+
+/// Remove a guardian from the recovery system.
+///
+/// Only multisig admins can remove guardians.
+///
+/// # Arguments
+/// * `env` - The contract environment
+/// * `caller` - Must be a current multisig admin
+/// * `guardian` - The guardian address to remove
+///
+/// # Errors
+/// * `Unauthorized` - Caller is not a multisig admin
+/// * `GuardianNotFound` - Guardian is not in the list
+pub fn remove_guardian(env: &Env, caller: Address, guardian: Address) -> Result<(), GovernanceError> {
+    let admins_key = GovernanceDataKey::MultisigAdmins;
+    let admins: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&admins_key)
+        .ok_or(GovernanceError::Unauthorized)?;
+    
+    if !admins.contains(caller.clone()) {
+        return Err(GovernanceError::Unauthorized);
+    }
+    
+    let guardians_key = GovernanceDataKey::Guardians;
+    let mut guardians: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&guardians_key)
+        .ok_or(GovernanceError::GuardianNotFound)?;
+    
+    let mut found = false;
+    let mut new_guardians = Vec::new(env);
+    for g in guardians.iter() {
+        if g != guardian {
+            new_guardians.push_back(g);
+        } else {
+            found = true;
+        }
+    }
+    
+    if !found {
+        return Err(GovernanceError::GuardianNotFound);
+    }
+    
+    env.storage().persistent().set(&guardians_key, &new_guardians);
+    
+    emit_guardian_removed_event(env, &guardian);
+    Ok(())
+}
+
+/// Set the guardian threshold for recovery approvals.
+///
+/// Only multisig admins can set the threshold. Threshold must be in range [1, guardians.len()].
+///
+/// # Arguments
+/// * `env` - The contract environment
+/// * `caller` - Must be a current multisig admin
+/// * `threshold` - Number of guardian approvals required for recovery
+///
+/// # Errors
+/// * `Unauthorized` - Caller is not a multisig admin
+/// * `InvalidGuardianConfig` - Threshold is 0 or exceeds guardian count
+pub fn set_guardian_threshold(env: &Env, caller: Address, threshold: u32) -> Result<(), GovernanceError> {
+    let admins_key = GovernanceDataKey::MultisigAdmins;
+    let admins: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&admins_key)
+        .ok_or(GovernanceError::Unauthorized)?;
+    
+    if !admins.contains(caller.clone()) {
+        return Err(GovernanceError::Unauthorized);
+    }
+    
+    let guardians_key = GovernanceDataKey::Guardians;
+    let guardians: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&guardians_key)
+        .unwrap_or(Vec::new(env));
+    
+    if threshold == 0 || threshold > guardians.len() as u32 {
+        return Err(GovernanceError::InvalidGuardianConfig);
+    }
+    
+    let threshold_key = GovernanceDataKey::GuardianThreshold;
+    env.storage().persistent().set(&threshold_key, &threshold);
+    Ok(())
+}
+
+/// Start a recovery process to change the admin.
+///
+/// Only guardians can initiate recovery. Creates a recovery request that must be
+/// approved by the threshold number of guardians before execution.
+///
+/// # Arguments
+/// * `env` - The contract environment
+/// * `initiator` - Must be a guardian
+/// * `old_admin` - The current admin to be replaced
+/// * `new_admin` - The new admin to be set
+///
+/// # Errors
+/// * `Unauthorized` - Initiator is not a guardian
+/// * `RecoveryInProgress` - A recovery is already in progress
+pub fn start_recovery(
+    env: &Env,
+    initiator: Address,
+    old_admin: Address,
+    new_admin: Address,
+) -> Result<(), GovernanceError> {
+    let guardians_key = GovernanceDataKey::Guardians;
+    let guardians: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&guardians_key)
+        .ok_or(GovernanceError::Unauthorized)?;
+    
+    if !guardians.contains(initiator.clone()) {
+        return Err(GovernanceError::Unauthorized);
+    }
+    
+    let recovery_key = GovernanceDataKey::RecoveryRequest;
+    if env.storage().persistent().has(&recovery_key) {
+        return Err(GovernanceError::RecoveryInProgress);
+    }
+    
+    let now = env.ledger().timestamp();
+    let recovery = RecoveryRequest {
+        old_admin: old_admin.clone(),
+        new_admin: new_admin.clone(),
+        initiator: initiator.clone(),
+        initiated_at: now,
+        expires_at: now + DEFAULT_RECOVERY_PERIOD,
+    };
+    
+    env.storage().persistent().set(&recovery_key, &recovery);
+    
+    let approvals_key = GovernanceDataKey::RecoveryApprovals;
+    let mut approvals = Vec::new(env);
+    approvals.push_back(initiator.clone());
+    env.storage().persistent().set(&approvals_key, &approvals);
+    
+    emit_recovery_started_event(env, &old_admin, &new_admin, &initiator);
+    Ok(())
+}
+
+/// Approve a recovery request.
+///
+/// Only guardians can approve. Each guardian can approve once. Once threshold
+/// is met, recovery can be executed.
+///
+/// # Arguments
+/// * `env` - The contract environment
+/// * `approver` - Must be a guardian
+///
+/// # Errors
+/// * `Unauthorized` - Approver is not a guardian
+/// * `NoRecoveryInProgress` - No recovery request exists
+/// * `AlreadyVoted` - Guardian has already approved
+/// * `ProposalExpired` - Recovery request has expired
+pub fn approve_recovery(env: &Env, approver: Address) -> Result<(), GovernanceError> {
+    let guardians_key = GovernanceDataKey::Guardians;
+    let guardians: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&guardians_key)
+        .ok_or(GovernanceError::Unauthorized)?;
+    
+    if !guardians.contains(approver.clone()) {
+        return Err(GovernanceError::Unauthorized);
+    }
+    
+    let recovery_key = GovernanceDataKey::RecoveryRequest;
+    let recovery: RecoveryRequest = env
+        .storage()
+        .persistent()
+        .get(&recovery_key)
+        .ok_or(GovernanceError::NoRecoveryInProgress)?;
+    
+    let now = env.ledger().timestamp();
+    if now > recovery.expires_at {
+        env.storage().persistent().remove(&recovery_key);
+        return Err(GovernanceError::ProposalExpired);
+    }
+    
+    let approvals_key = GovernanceDataKey::RecoveryApprovals;
+    let mut approvals: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&approvals_key)
+        .unwrap_or(Vec::new(env));
+    
+    if approvals.contains(approver.clone()) {
+        return Err(GovernanceError::AlreadyVoted);
+    }
+    
+    approvals.push_back(approver.clone());
+    env.storage().persistent().set(&approvals_key, &approvals);
+    
+    emit_recovery_approved_event(env, &approver);
+    Ok(())
+}
+
+/// Execute a recovery request after sufficient approvals.
+///
+/// Anyone can execute once threshold is met. Changes the admin to the new address
+/// and clears the recovery request.
+///
+/// # Arguments
+/// * `env` - The contract environment
+/// * `executor` - Any address (no authorization required)
+///
+/// # Errors
+/// * `NoRecoveryInProgress` - No recovery request exists
+/// * `InsufficientApprovals` - Not enough guardian approvals
+/// * `ProposalExpired` - Recovery request has expired
+pub fn execute_recovery(env: &Env, executor: Address) -> Result<(), GovernanceError> {
+    let recovery_key = GovernanceDataKey::RecoveryRequest;
+    let recovery: RecoveryRequest = env
+        .storage()
+        .persistent()
+        .get(&recovery_key)
+        .ok_or(GovernanceError::NoRecoveryInProgress)?;
+    
+    let now = env.ledger().timestamp();
+    if now > recovery.expires_at {
+        env.storage().persistent().remove(&recovery_key);
+        return Err(GovernanceError::ProposalExpired);
+    }
+    
+    let threshold_key = GovernanceDataKey::GuardianThreshold;
+    let threshold: u32 = env
+        .storage()
+        .persistent()
+        .get(&threshold_key)
+        .unwrap_or(1u32);
+    
+    let approvals_key = GovernanceDataKey::RecoveryApprovals;
+    let approvals: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&approvals_key)
+        .unwrap_or(Vec::new(env));
+    
+    if (approvals.len() as u32) < threshold {
+        return Err(GovernanceError::InsufficientApprovals);
+    }
+    
+    // Update admin in multisig admins
+    let admins_key = GovernanceDataKey::MultisigAdmins;
+    let mut admins: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&admins_key)
+        .unwrap_or(Vec::new(env));
+    
+    let mut new_admins = Vec::new(env);
+    for admin in admins.iter() {
+        if admin != recovery.old_admin {
+            new_admins.push_back(admin);
+        }
+    }
+    new_admins.push_back(recovery.new_admin.clone());
+    env.storage().persistent().set(&admins_key, &new_admins);
+    
+    // Clear recovery state
+    env.storage().persistent().remove(&recovery_key);
+    env.storage().persistent().remove(&approvals_key);
+    
+    emit_recovery_executed_event(env, &recovery.old_admin, &recovery.new_admin, &executor);
+    Ok(())
+}
+
+/// Get the list of guardians.
+pub fn get_guardians(env: &Env) -> Option<Vec<Address>> {
+    let guardians_key = GovernanceDataKey::Guardians;
+    env.storage().persistent().get(&guardians_key)
+}
+
+/// Get the guardian threshold.
+pub fn get_guardian_threshold(env: &Env) -> u32 {
+    let threshold_key = GovernanceDataKey::GuardianThreshold;
+    env.storage()
+        .persistent()
+        .get(&threshold_key)
+        .unwrap_or(1u32)
+}
+
+/// Get the current recovery request.
+pub fn get_recovery_request(env: &Env) -> Option<RecoveryRequest> {
+    let recovery_key = GovernanceDataKey::RecoveryRequest;
+    env.storage().persistent().get(&recovery_key)
+}
+
+/// Get recovery approvals.
+pub fn get_recovery_approvals(env: &Env) -> Option<Vec<Address>> {
+    let approvals_key = GovernanceDataKey::RecoveryApprovals;
+    env.storage().persistent().get(&approvals_key)
+}
+
+// ============================================================================
+// Recovery Events
+// ============================================================================
+
+fn emit_guardian_added_event(env: &Env, guardian: &Address) {
+    let topics = (Symbol::new(env, "guardian_added"), guardian.clone());
+    env.events().publish(topics, ());
+}
+
+fn emit_guardian_removed_event(env: &Env, guardian: &Address) {
+    let topics = (Symbol::new(env, "guardian_removed"), guardian.clone());
+    env.events().publish(topics, ());
+}
+
+fn emit_recovery_started_event(env: &Env, old_admin: &Address, new_admin: &Address, initiator: &Address) {
+    let topics = (
+        Symbol::new(env, "recovery_started"),
+        old_admin.clone(),
+        new_admin.clone(),
+    );
+    env.events().publish(topics, initiator.clone());
+}
+
+fn emit_recovery_approved_event(env: &Env, approver: &Address) {
+    let topics = (Symbol::new(env, "recovery_approved"), approver.clone());
+    env.events().publish(topics, ());
+}
+
+fn emit_recovery_executed_event(env: &Env, old_admin: &Address, new_admin: &Address, executor: &Address) {
+    let topics = (
+        Symbol::new(env, "recovery_executed"),
+        old_admin.clone(),
+        new_admin.clone(),
+    );
+    env.events().publish(topics, executor.clone());
 }
