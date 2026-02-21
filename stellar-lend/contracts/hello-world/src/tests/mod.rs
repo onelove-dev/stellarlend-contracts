@@ -2,5 +2,6 @@ pub mod interest_rate_test;
 pub mod liquidate_test;
 pub mod oracle_test;
 pub mod test;
+pub mod asset_config_test;
 // Cross-asset tests disabled - contract methods not yet implemented
 // pub mod test_cross_asset;
