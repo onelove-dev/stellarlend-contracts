@@ -1,21 +1,15 @@
-//! # StellarLend Simplified Lending Contract
-//!
-//! A streamlined lending contract that provides basic borrow functionality
-//! with collateral requirements, debt ceilings, and interest accrual.
-//!
-//! This contract is a simplified version of the main lending protocol,
-//! suitable for single-asset lending scenarios with a fixed 5% APY
-//! interest rate and 150% minimum collateral ratio.
-
 #![no_std]
 #![allow(deprecated)]
 use soroban_sdk::{contract, contractimpl, Address, Env};
 
 mod borrow;
+mod pause;
+
 use borrow::{
-    borrow, get_user_collateral, get_user_debt, initialize_borrow_settings, set_paused,
+    borrow, get_admin, get_user_collateral, get_user_debt, initialize_borrow_settings, set_admin,
     BorrowError, CollateralPosition, DebtPosition,
 };
+use pause::{is_paused, set_pause, PauseType};
 
 mod deposit;
 use deposit::{
@@ -26,6 +20,8 @@ use deposit::{
 
 #[cfg(test)]
 mod borrow_test;
+#[cfg(test)]
+mod pause_test;
 
 #[cfg(test)]
 mod deposit_test;
@@ -35,27 +31,22 @@ pub struct LendingContract;
 
 #[contractimpl]
 impl LendingContract {
+    /// Initialize the protocol with admin and settings
+    pub fn initialize(
+        env: Env,
+        admin: Address,
+        debt_ceiling: i128,
+        min_borrow_amount: i128,
+    ) -> Result<(), BorrowError> {
+        if get_admin(&env).is_some() {
+            return Err(BorrowError::Unauthorized);
+        }
+        set_admin(&env, &admin);
+        initialize_borrow_settings(&env, debt_ceiling, min_borrow_amount)?;
+        Ok(())
+    }
+
     /// Borrow assets against deposited collateral
-    ///
-    /// Allows users to borrow assets by providing collateral. The collateral ratio
-    /// must meet minimum requirements (150%). Interest accrues over time at 5% APY.
-    ///
-    /// # Arguments
-    /// * `user` - The borrower's address (must authorize)
-    /// * `asset` - The asset to borrow
-    /// * `amount` - The amount to borrow
-    /// * `collateral_asset` - The collateral asset
-    /// * `collateral_amount` - The collateral amount
-    ///
-    /// # Returns
-    /// Returns Ok(()) on success
-    ///
-    /// # Errors
-    /// - `InsufficientCollateral` - Collateral ratio below 150%
-    /// - `DebtCeilingReached` - Protocol debt ceiling exceeded
-    /// - `ProtocolPaused` - Protocol is paused
-    /// - `InvalidAmount` - Amount or collateral is zero or negative
-    /// - `BelowMinimumBorrow` - Amount below minimum borrow threshold
     pub fn borrow(
         env: Env,
         user: Address,
@@ -74,91 +65,108 @@ impl LendingContract {
         )
     }
 
-    /// Initialize borrow settings (admin only)
-    ///
-    /// Sets up the protocol's debt ceiling and minimum borrow amount.
-    ///
-    /// # Arguments
-    /// * `debt_ceiling` - Maximum total debt allowed in the protocol
-    /// * `min_borrow_amount` - Minimum amount that can be borrowed
-    pub fn initialize_borrow_settings(
+    /// Set protocol pause state for a specific operation (admin only)
+    pub fn set_pause(
         env: Env,
-        debt_ceiling: i128,
-        min_borrow_amount: i128,
+        admin: Address,
+        pause_type: PauseType,
+        paused: bool,
     ) -> Result<(), BorrowError> {
-        initialize_borrow_settings(&env, debt_ceiling, min_borrow_amount)
+        let current_admin = get_admin(&env).ok_or(BorrowError::Unauthorized)?;
+        if admin != current_admin {
+            return Err(BorrowError::Unauthorized);
+        }
+        admin.require_auth();
+        set_pause(&env, admin, pause_type, paused);
+        Ok(())
     }
 
-    /// Set protocol pause state (admin only)
-    ///
-    /// Pauses or unpauses the borrow functionality.
-    ///
-    /// # Arguments
-    /// * `paused` - True to pause, false to unpause
-    pub fn set_paused(env: Env, paused: bool) -> Result<(), BorrowError> {
-        set_paused(&env, paused)
+    /// Deposit collateral
+    pub fn deposit(
+        env: Env,
+        user: Address,
+        _asset: Address,
+        _amount: i128,
+    ) -> Result<(), BorrowError> {
+        user.require_auth();
+        if is_paused(&env, PauseType::Deposit) {
+            return Err(BorrowError::ProtocolPaused);
+        }
+        // Stub implementation
+        Ok(())
+    }
+
+    /// Repay borrowed assets
+    pub fn repay(
+        env: Env,
+        user: Address,
+        _asset: Address,
+        _amount: i128,
+    ) -> Result<(), BorrowError> {
+        user.require_auth();
+        if is_paused(&env, PauseType::Repay) {
+            return Err(BorrowError::ProtocolPaused);
+        }
+        // Stub implementation
+        Ok(())
+    }
+
+    /// Withdraw collateral
+    pub fn withdraw(
+        env: Env,
+        user: Address,
+        _asset: Address,
+        _amount: i128,
+    ) -> Result<(), BorrowError> {
+        user.require_auth();
+        if is_paused(&env, PauseType::Withdraw) {
+            return Err(BorrowError::ProtocolPaused);
+        }
+        // Stub implementation
+        Ok(())
+    }
+
+    /// Liquidate a position
+    pub fn liquidate(
+        env: Env,
+        liquidator: Address,
+        _user: Address,
+        _debt_asset: Address,
+        _collateral_asset: Address,
+        _amount: i128,
+    ) -> Result<(), BorrowError> {
+        liquidator.require_auth();
+        if is_paused(&env, PauseType::Liquidation) {
+            return Err(BorrowError::ProtocolPaused);
+        }
+        // Stub implementation
+        Ok(())
     }
 
     /// Get user's debt position
-    ///
-    /// Returns the user's current debt including accrued interest.
-    ///
-    /// # Arguments
-    /// * `user` - The user's address
-    ///
-    /// # Returns
-    /// DebtPosition with borrowed amount, interest, and last update time
     pub fn get_user_debt(env: Env, user: Address) -> DebtPosition {
         get_user_debt(&env, &user)
     }
 
     /// Get user's collateral position
-    ///
-    /// Returns the user's current collateral.
-    ///
-    /// # Arguments
-    /// * `user` - The user's address
-    ///
-    /// # Returns
-    /// CollateralPosition with amount and asset
     pub fn get_user_collateral(env: Env, user: Address) -> CollateralPosition {
         get_user_collateral(&env, &user)
     }
 
     /// Deposit collateral into the protocol
-    ///
-    /// Allows users to deposit assets as collateral. Supports configured collateral
-    /// assets (XLM, USDC, etc.). Validates amounts and emits events.
-    ///
-    /// # Arguments
-    /// * `user` - The depositor's address (must authorize)
-    /// * `asset` - The collateral asset address
-    /// * `amount` - The amount to deposit
-    ///
-    /// # Returns
-    /// Returns the updated collateral balance
-    ///
-    /// # Errors
-    /// - `InvalidAmount` - Amount is zero, negative, or below minimum
-    /// - `DepositPaused` - Deposit operations are paused
-    /// - `ExceedsDepositCap` - Protocol deposit cap would be exceeded
-    /// - `Overflow` - Arithmetic overflow occurred
     pub fn deposit(
         env: Env,
         user: Address,
         asset: Address,
         amount: i128,
     ) -> Result<i128, DepositError> {
+        if is_paused(&env, PauseType::Deposit) {
+            return Err(DepositError::DepositPaused);
+        }
         deposit(&env, user, asset, amount)
     }
 
     /// Initialize deposit settings (admin only)
-    ///
-    /// Sets up the protocol's deposit cap and minimum deposit amount.
-    ///
-    /// # Arguments
-    /// * `deposit_cap` - Maximum total deposits allowed
-    /// * `min_deposit_amount` - Minimum amount that can be deposited
     pub fn initialize_deposit_settings(
         env: Env,
         deposit_cap: i128,
@@ -168,30 +176,22 @@ impl LendingContract {
     }
 
     /// Set deposit pause state (admin only)
-    ///
-    /// Pauses or unpauses the deposit functionality.
-    ///
-    /// # Arguments
-    /// * `paused` - True to pause, false to unpause
+    /// Deprecated: use set_pause instead
     pub fn set_deposit_paused(env: Env, paused: bool) -> Result<(), DepositError> {
         set_deposit_paused(&env, paused)
     }
 
     /// Get user's deposit collateral position
-    ///
-    /// Returns the user's current deposit collateral position.
-    ///
-    /// # Arguments
-    /// * `user` - The user's address
-    /// * `asset` - The asset address
-    ///
-    /// # Returns
-    /// DepositCollateralPosition with amount, asset, and last deposit time
     pub fn get_user_collateral_deposit(
         env: Env,
         user: Address,
         asset: Address,
     ) -> DepositCollateralPosition {
         get_deposit_collateral(&env, &user, &asset)
+    }
+
+    /// Get protocol admin
+    pub fn get_admin(env: Env) -> Option<Address> {
+        get_admin(&env)
     }
 }

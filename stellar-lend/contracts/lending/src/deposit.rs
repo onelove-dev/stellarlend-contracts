@@ -1,4 +1,5 @@
-use soroban_sdk::{contracterror, contracttype, Address, Env, Symbol};
+use crate::pause::{self, PauseType};
+use soroban_sdk::{contracterror, contractevent, contracttype, Address, Env, Symbol};
 
 /// Errors that can occur during deposit operations
 #[contracterror]
@@ -33,7 +34,7 @@ pub struct CollateralPosition {
 }
 
 /// Deposit event data
-#[contracttype]
+#[contractevent]
 #[derive(Clone, Debug)]
 pub struct DepositEvent {
     pub user: Address,
@@ -61,7 +62,7 @@ pub fn deposit(
 ) -> Result<i128, DepositError> {
     user.require_auth();
 
-    if is_paused(env) {
+    if pause::is_paused(env, PauseType::Deposit) {
         return Err(DepositError::DepositPaused);
     }
 
@@ -174,11 +175,11 @@ fn get_min_deposit_amount(env: &Env) -> i128 {
         .unwrap_or(0)
 }
 
-fn is_paused(env: &Env) -> bool {
+fn get_total_deposits(env: &Env) -> i128 {
     env.storage()
         .persistent()
-        .get(&DepositDataKey::Paused)
-        .unwrap_or(false)
+        .get(&DepositDataKey::TotalDeposits)
+        .unwrap_or(0)
 }
 
 fn emit_deposit_event(env: &Env, user: Address, asset: Address, amount: i128, new_balance: i128) {
