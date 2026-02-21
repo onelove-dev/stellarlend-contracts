@@ -95,11 +95,17 @@ fn test_default_risk_params_after_init() {
     // The Soroban test client auto-unwraps Result<i128, _> → i128 (panics on Err).
     // min_collateral_ratio = 110 % = 11_000 bps
     let mcr = client.get_min_collateral_ratio();
-    assert_eq!(mcr, 11_000, "min_collateral_ratio should be 11000 bps (110%)");
+    assert_eq!(
+        mcr, 11_000,
+        "min_collateral_ratio should be 11000 bps (110%)"
+    );
 
     // liquidation_threshold = 105 % = 10_500 bps
     let lt = client.get_liquidation_threshold();
-    assert_eq!(lt, 10_500, "liquidation_threshold should be 10500 bps (105%)");
+    assert_eq!(
+        lt, 10_500,
+        "liquidation_threshold should be 10500 bps (105%)"
+    );
 
     // close_factor = 50 % = 5_000 bps
     let cf = client.get_close_factor();
@@ -116,7 +122,10 @@ fn test_risk_config_exists_after_init() {
     let e = env();
     let (_id, _admin, client) = setup(&e);
     let config = client.get_risk_config();
-    assert!(config.is_some(), "RiskConfig must exist after initialization");
+    assert!(
+        config.is_some(),
+        "RiskConfig must exist after initialization"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -144,7 +153,10 @@ fn test_interest_rates_accessible_after_init() {
 
     assert!(borrow_rate >= 0, "borrow_rate must be non-negative");
     assert!(supply_rate >= 0, "supply_rate must be non-negative");
-    assert!(supply_rate <= borrow_rate, "supply_rate must not exceed borrow_rate");
+    assert!(
+        supply_rate <= borrow_rate,
+        "supply_rate must not exceed borrow_rate"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +168,10 @@ fn test_interest_rates_accessible_after_init() {
 fn test_emergency_pause_disabled_after_init() {
     let e = env();
     let (_id, _admin, client) = setup(&e);
-    assert!(!client.is_emergency_paused(), "emergency pause must be OFF after init");
+    assert!(
+        !client.is_emergency_paused(),
+        "emergency pause must be OFF after init"
+    );
 }
 
 /// Individual operation pause switches must all start unpaused.
@@ -165,8 +180,13 @@ fn test_operation_pause_switches_disabled_after_init() {
     let e = env();
     let (_id, _admin, client) = setup(&e);
 
-    for op in &["pause_deposit", "pause_withdraw", "pause_borrow", "pause_repay", "pause_liquidate"]
-    {
+    for op in &[
+        "pause_deposit",
+        "pause_withdraw",
+        "pause_borrow",
+        "pause_repay",
+        "pause_liquidate",
+    ] {
         let sym = soroban_sdk::Symbol::new(&e, op);
         assert!(
             !client.is_operation_paused(&sym),
@@ -190,7 +210,10 @@ fn test_admin_can_set_emergency_pause() {
     assert!(client.is_emergency_paused(), "emergency pause should be ON");
 
     client.set_emergency_pause(&admin, &false);
-    assert!(!client.is_emergency_paused(), "emergency pause should be OFF");
+    assert!(
+        !client.is_emergency_paused(),
+        "emergency pause should be OFF"
+    );
 }
 
 /// The admin must be able to update the interest rate spread without error.
@@ -283,7 +306,10 @@ fn test_well_collateralized_position_cannot_be_liquidated() {
     let (_id, _admin, client) = setup(&e);
     // 120 % – above the 105 % liquidation threshold.
     let can_liq = client.can_be_liquidated(&120_i128, &100_i128);
-    assert!(!can_liq, "well-collateralized position must NOT be liquidatable");
+    assert!(
+        !can_liq,
+        "well-collateralized position must NOT be liquidatable"
+    );
 }
 
 /// A position at exactly the liquidation threshold (100% ≤ 105%) must be liquidatable.
@@ -293,7 +319,10 @@ fn test_undercollateralized_position_can_be_liquidated() {
     let (_id, _admin, client) = setup(&e);
     // 100 % – below the 105 % liquidation threshold.
     let can_liq = client.can_be_liquidated(&100_i128, &100_i128);
-    assert!(can_liq, "undercollateralized position (100%) must be liquidatable");
+    assert!(
+        can_liq,
+        "undercollateralized position (100%) must be liquidatable"
+    );
 }
 
 /// A position with zero debt must never be eligible for liquidation.
@@ -334,5 +363,8 @@ fn test_liquidation_incentive_amount() {
     let liquidated = 1_000_i128;
     let incentive = client.get_liquidation_incentive_amount(&liquidated);
     // 10 % incentive → 1000 × 1000 / 10000 = 100
-    assert_eq!(incentive, 100, "liquidation incentive should be 10% of liquidated amount");
+    assert_eq!(
+        incentive, 100,
+        "liquidation incentive should be 10% of liquidated amount"
+    );
 }

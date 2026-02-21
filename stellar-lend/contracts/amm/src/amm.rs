@@ -1019,11 +1019,7 @@ pub fn initialize_amm_settings(
 ) -> Result<(), AmmError> {
     // Guard against double initialization
     let admin_key = AmmDataKey::Admin;
-    if env
-        .storage()
-        .persistent()
-        .has::<AmmDataKey>(&admin_key)
-    {
+    if env.storage().persistent().has::<AmmDataKey>(&admin_key) {
         return Err(AmmError::AlreadyInitialized);
     }
 

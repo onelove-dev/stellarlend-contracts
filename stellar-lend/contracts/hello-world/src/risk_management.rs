@@ -117,11 +117,7 @@ const MAX_PARAMETER_CHANGE_BPS: i128 = 1_000; // 10% maximum change per update
 pub fn initialize_risk_management(env: &Env, admin: Address) -> Result<(), RiskManagementError> {
     // Guard against double initialization – admin key must not exist yet.
     let admin_key = RiskDataKey::Admin;
-    if env
-        .storage()
-        .persistent()
-        .has::<RiskDataKey>(&admin_key)
-    {
+    if env.storage().persistent().has::<RiskDataKey>(&admin_key) {
         return Err(RiskManagementError::AlreadyInitialized);
     }
 
