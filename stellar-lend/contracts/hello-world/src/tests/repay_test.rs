@@ -1,8 +1,8 @@
 use crate::deposit::{DepositDataKey, Position, ProtocolAnalytics, UserAnalytics};
-use crate::{deposit, HelloContract, HelloContractClient};
+use crate::{HelloContract, HelloContractClient};
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
-    Address, Env, Map, Symbol,
+    Address, Env,
 };
 
 /// Helper function to create a test environment
@@ -200,7 +200,7 @@ fn test_repay_interest_accrual() {
 
     // Repay some amount
     let repay_amount = 100;
-    let (remaining_debt, interest_paid, principal_paid) =
+    let (_remaining_debt, interest_paid, principal_paid) =
         client.repay_debt(&user, &None, &repay_amount);
 
     assert!(interest_paid > 0, "Interest should have been paid");
