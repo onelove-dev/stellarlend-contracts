@@ -55,13 +55,17 @@ pub enum RiskManagementError {
 #[derive(Clone)]
 #[cfg_attr(test, derive(Debug, PartialEq))]
 pub enum RiskDataKey {
-    /// Risk configuration parameters
+    /// Global risk configuration parameters (MCR, liquidation threshold, etc.)
+    /// Value type: RiskConfig
     RiskConfig,
-    /// Admin address
+    /// Protocol admin address authorized for risk management
+    /// Value type: Address
     Admin,
-    /// Emergency pause flag
+    /// Global emergency pause flag. If true, all protocol operations are halted.
+    /// Value type: bool
     EmergencyPause,
-    /// Parameter change timelock (for safety)
+    /// Timelock for safety of sensitive parameter changes
+    /// Value type: u64 (timestamp)
     ParameterChangeTimelock,
 }
 

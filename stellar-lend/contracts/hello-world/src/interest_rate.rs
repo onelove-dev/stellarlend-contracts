@@ -49,11 +49,13 @@ pub enum InterestRateError {
 #[derive(Clone)]
 #[cfg_attr(test, derive(Debug, PartialEq))]
 pub enum InterestRateDataKey {
-    /// Interest rate configuration
+    /// Kink-based interest rate model parameters
+    /// Value type: InterestRateConfig
     InterestRateConfig,
-    /// Admin address
+    /// Module admin address authorized for rate adjustments
+    /// Value type: Address
     Admin,
-    /// Emergency rate adjustment flag
+    /// Placeholder for emergency rate adjustment status
     EmergencyRateAdjustment,
 }
 

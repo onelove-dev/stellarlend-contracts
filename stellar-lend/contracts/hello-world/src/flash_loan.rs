@@ -56,13 +56,15 @@ pub enum FlashLoanError {
 #[derive(Clone)]
 #[cfg_attr(test, derive(Debug, PartialEq))]
 pub enum FlashLoanDataKey {
-    /// Flash loan fee in basis points (e.g., 9 = 0.09%)
+    /// Basis points fee charged for flash loans (legacy)
     FlashLoanFeeBps,
-    /// Active flash loans: Map<(Address, Address), FlashLoanRecord>
+    /// Transient record of an active flash loan (prevents reentrancy)
+    /// Value type: FlashLoanRecord
     ActiveFlashLoan(Address, Address),
-    /// Flash loan configuration
+    /// Global flash loan parameters (fee, min/max amount)
+    /// Value type: FlashLoanConfig
     FlashLoanConfig,
-    /// Pause switches for flash loan operations
+    /// Pause switches specifically for flash loan operations: Map<Symbol, bool>
     PauseSwitches,
 }
 
