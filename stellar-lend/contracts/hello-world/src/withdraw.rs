@@ -5,7 +5,7 @@ use crate::deposit::{
     emit_user_activity_tracked_event, AssetParams, DepositDataKey, Position, ProtocolAnalytics,
     UserAnalytics,
 };
-use crate::events::{log_withdrawal, WithdrawalEvent};
+use crate::events::{emit_withdrawal, WithdrawalEvent};
 
 /// Errors that can occur during withdraw operations
 #[contracterror]
@@ -282,7 +282,7 @@ pub fn withdraw_collateral(
     })?;
 
     // Emit withdraw event
-    log_withdrawal(
+    emit_withdrawal(
         env,
         WithdrawalEvent {
             user: user.clone(),
