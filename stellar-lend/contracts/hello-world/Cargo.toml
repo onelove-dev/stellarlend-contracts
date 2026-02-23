@@ -5,16 +5,23 @@ edition = "2021"
 publish = false
 
 [lib]
-crate-type = ["lib", "cdylib"]
+crate-type = ["cdylib", "lib"]
 doctest = false
 
 [dependencies]
 soroban-sdk = { workspace = true }
-wee_alloc = "0.4.5"
 soroban-token-sdk = { workspace = true }
+<<<<<<< test/amm-integration-tests
 stellarlend-amm = { path = "../amm" }
+<<<<<<< HEAD
 stellar-contract-utils = { version = "0.6.0" }
 stellar-macros = { version = "0.6.0" }
+=======
+=======
+stellar-contract-utils = { version = "0.6.0" }
+stellar-macros = { version = "0.6.0" }
+>>>>>>> main
+>>>>>>> 5bd537216897d64252964946e9d2997b0fc39ec7
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
