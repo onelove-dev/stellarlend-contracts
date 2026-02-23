@@ -1,5 +1,5 @@
 use crate::{borrow::BorrowError, LendingContract, LendingContractClient};
-use soroban_sdk::{testutils::Address as _, Address, Env, IntoVal, Symbol, Val, Vec};
+use soroban_sdk::{testutils::Address as _, Address, Env, IntoVal, Symbol};
 
 #[test]
 fn test_receive_deposit_success() {

@@ -1,7 +1,7 @@
 use super::*;
 use soroban_sdk::{
     testutils::{Address as _, Events, Ledger},
-    Address, Env, FromVal, IntoVal, Symbol,
+    Address, Env, FromVal, Symbol,
 };
 
 /// Helper: register contract and return client
