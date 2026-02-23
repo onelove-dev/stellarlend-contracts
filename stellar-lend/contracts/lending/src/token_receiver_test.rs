@@ -1,8 +1,5 @@
-use crate::{LendingContract, LendingContractClient, borrow::BorrowError};
-use soroban_sdk::{
-    testutils::{Address as _},
-    Address, Env, Symbol, IntoVal, Vec, Val,
-};
+use crate::{borrow::BorrowError, LendingContract, LendingContractClient};
+use soroban_sdk::{testutils::Address as _, Address, Env, IntoVal, Symbol, Val, Vec};
 
 #[test]
 fn test_receive_deposit_success() {
@@ -18,7 +15,7 @@ fn test_receive_deposit_success() {
     client.initialize_borrow_settings(&1_000_000_000, &1000);
 
     let payload = (Symbol::new(&env, "deposit"),).into_val(&env);
-    
+
     // Simulate token contract calling receive
     client.receive(&asset, &from, &50_000, &payload);
 
@@ -45,7 +42,7 @@ fn test_receive_repay_success() {
     client.borrow(&from, &asset, &10_000, &collateral_asset, &20_000);
 
     let payload = (Symbol::new(&env, "repay"),).into_val(&env);
-    
+
     // Simulate token contract calling receive for repayment
     client.receive(&asset, &from, &5_000, &payload);
 
@@ -67,7 +64,7 @@ fn test_receive_invalid_action() {
     client.initialize_borrow_settings(&1_000_000_000, &1000);
 
     let payload = (Symbol::new(&env, "withdraw"),).into_val(&env);
-    
+
     let result = client.try_receive(&asset, &from, &50_000, &payload);
     assert_eq!(result, Err(Ok(BorrowError::AssetNotSupported)));
 }

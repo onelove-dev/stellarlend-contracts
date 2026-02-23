@@ -211,7 +211,7 @@ impl LendingContract {
         amount: i128,
     ) -> Result<i128, WithdrawError> {
         if is_paused(&env, PauseType::Withdraw) {
-             return Err(WithdrawError::WithdrawPaused);
+            return Err(WithdrawError::WithdrawPaused);
         }
         withdraw::withdraw(&env, user, asset, amount)
     }

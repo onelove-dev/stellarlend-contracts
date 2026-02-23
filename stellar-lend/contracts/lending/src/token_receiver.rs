@@ -3,8 +3,8 @@
 //! Handles incoming token transfers to the contract, enabling automatic
 //! collateral deposits and repayments.
 
-use soroban_sdk::{Env, Address, Symbol, Val, Vec, FromVal};
-use crate::borrow::{BorrowError, deposit, repay};
+use crate::borrow::{deposit, repay, BorrowError};
+use soroban_sdk::{Address, Env, FromVal, Symbol, Val, Vec};
 
 /// Token receiver hook for Soroban tokens
 ///

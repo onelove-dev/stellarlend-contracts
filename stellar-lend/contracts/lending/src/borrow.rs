@@ -178,18 +178,13 @@ pub fn borrow(
 /// * `user` - The user's address
 /// * `asset` - The collateral asset
 /// * `amount` - The amount to deposit
-pub fn deposit(
-    env: &Env,
-    user: Address,
-    asset: Address,
-    amount: i128,
-) -> Result<(), BorrowError> {
+pub fn deposit(env: &Env, user: Address, asset: Address, amount: i128) -> Result<(), BorrowError> {
     if amount <= 0 {
         return Err(BorrowError::InvalidAmount);
     }
 
     let mut collateral_position = get_collateral_position(env, &user);
-    
+
     // If it's the first deposit, set the asset
     if collateral_position.amount == 0 {
         collateral_position.asset = asset.clone();
@@ -204,10 +199,8 @@ pub fn deposit(
 
     save_collateral_position(env, &user, &collateral_position);
 
-    env.events().publish(
-        (Symbol::new(env, "deposit"), user),
-        (asset, amount),
-    );
+    env.events()
+        .publish((Symbol::new(env, "deposit"), user), (asset, amount));
 
     Ok(())
 }
@@ -219,18 +212,13 @@ pub fn deposit(
 /// * `user` - The user's address
 /// * `asset` - The borrowed asset
 /// * `amount` - The amount to repay
-pub fn repay(
-    env: &Env,
-    user: Address,
-    asset: Address,
-    amount: i128,
-) -> Result<(), BorrowError> {
+pub fn repay(env: &Env, user: Address, asset: Address, amount: i128) -> Result<(), BorrowError> {
     if amount <= 0 {
         return Err(BorrowError::InvalidAmount);
     }
 
     let mut debt_position = get_debt_position(env, &user);
-    
+
     if debt_position.borrowed_amount == 0 && debt_position.interest_accrued == 0 {
         return Err(BorrowError::InvalidAmount);
     }
@@ -261,10 +249,10 @@ pub fn repay(
     // Repay principal
     if remaining_repayment > 0 {
         if remaining_repayment > debt_position.borrowed_amount {
-             return Err(BorrowError::RepayAmountTooHigh);
+            return Err(BorrowError::RepayAmountTooHigh);
         }
         debt_position.borrowed_amount -= remaining_repayment;
-        
+
         // Update total protocol debt
         let total_debt = get_total_debt(env);
         let new_total = total_debt.saturating_sub(remaining_repayment);
@@ -273,10 +261,8 @@ pub fn repay(
 
     save_debt_position(env, &user, &debt_position);
 
-    env.events().publish(
-        (Symbol::new(env, "repay"), user),
-        (asset, amount),
-    );
+    env.events()
+        .publish((Symbol::new(env, "repay"), user), (asset, amount));
 
     Ok(())
 }
