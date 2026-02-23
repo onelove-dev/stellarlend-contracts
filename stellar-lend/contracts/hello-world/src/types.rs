@@ -1,11 +1,4 @@
-use soroban_sdk::{
-    contracttype,
-     Address, 
-     String, 
-     Symbol, 
-     Vec,
-     Bytes
-    };
+use soroban_sdk::{contracttype, Address, Bytes, String, Symbol, Vec};
 
 // ========================================================================
 // Proposal Types
@@ -89,7 +82,6 @@ pub struct ProposalOutcome {
     pub quorum_required: i128,
 }
 
-
 /// Asset status for carbon credit or tokenized assets
 #[derive(Clone, Debug, PartialEq)]
 #[contracttype]
@@ -107,12 +99,12 @@ pub enum AssetStatus {
 #[derive(Clone, Debug, PartialEq)]
 #[contracttype]
 pub struct GovernanceConfig {
-    pub voting_period: u64,        // Duration in seconds
-    pub execution_delay: u64,       // Delay before execution
-    pub quorum_bps: u32,            // Quorum in basis points
-    pub proposal_threshold: i128,   // Min tokens to create proposal
-    pub vote_token: Address,        // Token used for voting
-    pub timelock_duration: u64,     // Max time before expiration
+    pub voting_period: u64,             // Duration in seconds
+    pub execution_delay: u64,           // Delay before execution
+    pub quorum_bps: u32,                // Quorum in basis points
+    pub proposal_threshold: i128,       // Min tokens to create proposal
+    pub vote_token: Address,            // Token used for voting
+    pub timelock_duration: u64,         // Max time before expiration
     pub default_voting_threshold: i128, // Default 50% in basis points
 }
 

@@ -16,7 +16,7 @@ pub mod security_test;
 pub mod test;
 pub mod withdraw_test;
 // Cross-asset tests disabled - contract methods not yet implemented
-pub mod views_test;
 pub mod governance_test;
+pub mod views_test;
 // Cross-asset tests re-enabled when contract exposes full CA API (try_* return Result; get_user_asset_position; try_ca_repay_debt)
 // pub mod test_cross_asset;

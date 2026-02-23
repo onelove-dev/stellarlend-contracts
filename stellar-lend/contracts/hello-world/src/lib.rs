@@ -22,13 +22,13 @@ use soroban_sdk::{contract, contractimpl, Address, Env, Map, String, Symbol, Vec
 
 mod borrow;
 mod deposit;
+mod errors;
 mod events;
 mod repay;
 mod risk_management;
-mod withdraw;
-mod errors;
-mod types;
 mod storage;
+mod types;
+mod withdraw;
 
 use borrow::borrow_asset;
 use deposit::deposit_collateral;
@@ -92,8 +92,8 @@ use storage::GuardianConfig;
 
 // Governance module
 use crate::types::{
-    Proposal, ProposalOutcome, ProposalType, VoteType, VoteInfo,
-    MultisigConfig, RecoveryRequest, GovernanceConfig
+    GovernanceConfig, MultisigConfig, Proposal, ProposalOutcome, ProposalType, RecoveryRequest,
+    VoteInfo, VoteType,
 };
 // use crate::governance::self;
 
@@ -1124,14 +1124,14 @@ impl HelloContract {
         default_voting_threshold: Option<i128>,
     ) -> Result<(), errors::GovernanceError> {
         governance::initialize(
-            &env, 
-            admin, 
-            vote_token, 
-            voting_period, 
+            &env,
+            admin,
+            vote_token,
+            voting_period,
             execution_delay,
-            quorum_bps, 
-            proposal_threshold, 
-            timelock_duration, 
+            quorum_bps,
+            proposal_threshold,
+            timelock_duration,
             default_voting_threshold,
         )
     }

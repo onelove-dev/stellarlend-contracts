@@ -14,9 +14,9 @@
 //! - **No sensitive data**: all fields are publicly observable state only
 //!   (`Address`, `Symbol`, `i128`, `u32`, `u64`, `bool`, `Option<Address>`).
 #[allow(unused_variables)]
-use soroban_sdk::{contractevent, Address, Env, Symbol, String, Vec};
+use soroban_sdk::{contractevent, Address, Env, String, Symbol, Vec};
 
-use crate::types::{ProposalType, VoteType, ProposalStatus, AssetStatus};
+use crate::types::{AssetStatus, ProposalStatus, ProposalType, VoteType};
 
 // ============================================================================
 // Core Lending Events (Existing)

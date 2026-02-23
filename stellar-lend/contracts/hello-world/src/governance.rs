@@ -15,31 +15,30 @@
 //! ## Social Recovery
 //! - Guardians can recover admin access if keys are lost
 
-use soroban_sdk::{
-    token::TokenClient, Env, Address, String, Vec,  //Symbol,  Map,
-    };
 use soroban_sdk::token::TokenInterface;
+use soroban_sdk::{
+    token::TokenClient,
+    Address,
+    Env,
+    String,
+    Vec, //Symbol,  Map,
+};
 
 use crate::errors::GovernanceError;
-use crate::storage::{
-    GovernanceDataKey,
-    GuardianConfig
-};
+use crate::storage::{GovernanceDataKey, GuardianConfig};
 
+use crate::events::{
+    GovernanceInitializedEvent, GuardianAddedEvent, GuardianRemovedEvent, ProposalApprovedEvent,
+    ProposalCancelledEvent, ProposalCreatedEvent, ProposalExecutedEvent, ProposalFailedEvent,
+    ProposalQueuedEvent, RecoveryApprovedEvent, RecoveryExecutedEvent, RecoveryStartedEvent,
+    VoteCastEvent,
+};
 #[allow(unused_variables)]
 use crate::types::{
-    Proposal, ProposalStatus, VoteType, VoteInfo, ProposalType,
-    GovernanceConfig, ProposalOutcome, MultisigConfig, RecoveryRequest,
-    BASIS_POINTS_SCALE, DEFAULT_VOTING_PERIOD,
-    DEFAULT_EXECUTION_DELAY, DEFAULT_QUORUM_BPS, DEFAULT_VOTING_THRESHOLD,
-    DEFAULT_TIMELOCK_DURATION, DEFAULT_RECOVERY_PERIOD,
-};
-use crate::events::{
-    GovernanceInitializedEvent, ProposalCreatedEvent, VoteCastEvent,
-    ProposalQueuedEvent, ProposalExecutedEvent, ProposalFailedEvent,
-    ProposalCancelledEvent, ProposalApprovedEvent, GuardianAddedEvent,
-    GuardianRemovedEvent, RecoveryStartedEvent, RecoveryApprovedEvent,
-    RecoveryExecutedEvent,
+    GovernanceConfig, MultisigConfig, Proposal, ProposalOutcome, ProposalStatus, ProposalType,
+    RecoveryRequest, VoteInfo, VoteType, BASIS_POINTS_SCALE, DEFAULT_EXECUTION_DELAY,
+    DEFAULT_QUORUM_BPS, DEFAULT_RECOVERY_PERIOD, DEFAULT_TIMELOCK_DURATION, DEFAULT_VOTING_PERIOD,
+    DEFAULT_VOTING_THRESHOLD,
 };
 
 // ========================================================================
@@ -80,29 +79,43 @@ pub fn initialize(
         return Err(GovernanceError::InvalidVotingPeriod);
     }
 
-    env.storage().instance().set(&GovernanceDataKey::Admin, &admin);
-    env.storage().instance().set(&GovernanceDataKey::Config, &config);
-    env.storage().instance().set(&GovernanceDataKey::NextProposalId, &0u64);
+    env.storage()
+        .instance()
+        .set(&GovernanceDataKey::Admin, &admin);
+    env.storage()
+        .instance()
+        .set(&GovernanceDataKey::Config, &config);
+    env.storage()
+        .instance()
+        .set(&GovernanceDataKey::NextProposalId, &0u64);
 
     let mut admins = Vec::new(env);
     admins.push_back(admin.clone());
-    let multisig_config = MultisigConfig { admins, threshold: 1 };
-    env.storage().instance().set(&GovernanceDataKey::MultisigConfig, &multisig_config);
+    let multisig_config = MultisigConfig {
+        admins,
+        threshold: 1,
+    };
+    env.storage()
+        .instance()
+        .set(&GovernanceDataKey::MultisigConfig, &multisig_config);
 
     // FIX: Initialize GuardianConfig so query functions don't fail in tests
     let guardian_config = GuardianConfig {
         guardians: Vec::new(env),
         threshold: 1,
     };
-    env.storage().instance().set(&GovernanceDataKey::GuardianConfig, &guardian_config);
+    env.storage()
+        .instance()
+        .set(&GovernanceDataKey::GuardianConfig, &guardian_config);
 
-    GovernanceInitializedEvent { 
+    GovernanceInitializedEvent {
         admin,
         vote_token: config.vote_token,
         voting_period: config.voting_period,
         quorum_bps: config.quorum_bps,
         timestamp: env.ledger().timestamp(),
-    }.publish(env);
+    }
+    .publish(env);
 
     Ok(())
 }
@@ -119,7 +132,8 @@ pub fn create_proposal(
 ) -> Result<u64, GovernanceError> {
     proposer.require_auth();
 
-    let config: GovernanceConfig = env.storage()
+    let config: GovernanceConfig = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::Config)
         .ok_or(GovernanceError::NotInitialized)?;
@@ -128,19 +142,20 @@ pub fn create_proposal(
     if config.proposal_threshold > 0 {
         let token_client = TokenClient::new(env, &config.vote_token);
         let balance = token_client.balance(&proposer);
-        
+
         if balance < config.proposal_threshold {
             return Err(GovernanceError::InsufficientProposalPower);
         }
     }
 
-    let next_id: u64 = env.storage()
+    let next_id: u64 = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::NextProposalId)
         .unwrap_or(0);
 
     let now = env.ledger().timestamp();
-    
+
     let proposal = Proposal {
         id: next_id,
         proposer: proposer.clone(),
@@ -159,8 +174,10 @@ pub fn create_proposal(
     };
 
     // Store proposal
-    env.storage().persistent().set(&GovernanceDataKey::Proposal(next_id), &proposal);
-    
+    env.storage()
+        .persistent()
+        .set(&GovernanceDataKey::Proposal(next_id), &proposal);
+
     // Track user's proposals for querying
     let user_key = GovernanceDataKey::UserProposals(proposer.clone(), next_id);
     env.storage().persistent().set(&user_key, &true);
@@ -171,7 +188,9 @@ pub fn create_proposal(
     env.storage().persistent().set(&approvals_key, &approvals);
 
     // Update next proposal ID
-    env.storage().instance().set(&GovernanceDataKey::NextProposalId, &(next_id + 1));
+    env.storage()
+        .instance()
+        .set(&GovernanceDataKey::NextProposalId, &(next_id + 1));
 
     ProposalCreatedEvent {
         proposal_id: next_id,
@@ -191,7 +210,6 @@ pub fn create_proposal(
 // Voting
 // ========================================================================
 
-
 pub fn vote(
     env: &Env,
     voter: Address,
@@ -200,12 +218,14 @@ pub fn vote(
 ) -> Result<(), GovernanceError> {
     voter.require_auth();
 
-    let config: GovernanceConfig = env.storage()
+    let config: GovernanceConfig = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::Config)
         .ok_or(GovernanceError::NotInitialized)?;
 
-    let mut proposal: Proposal = env.storage()
+    let mut proposal: Proposal = env
+        .storage()
         .persistent()
         .get(&GovernanceDataKey::Proposal(proposal_id))
         .ok_or(GovernanceError::ProposalNotFound)?;
@@ -240,20 +260,31 @@ pub fn vote(
     }
     proposal.total_voting_power += voting_power;
 
-    env.storage().persistent().set(&GovernanceDataKey::Proposal(proposal_id), &proposal);
-    env.storage().persistent().set(&vote_key, &VoteInfo {
-        voter: voter.clone(),
+    env.storage()
+        .persistent()
+        .set(&GovernanceDataKey::Proposal(proposal_id), &proposal);
+    env.storage().persistent().set(
+        &vote_key,
+        &VoteInfo {
+            voter: voter.clone(),
+            proposal_id,
+            vote_type: vote_type.clone(),
+            voting_power,
+            timestamp: now,
+        },
+    );
+
+    VoteCastEvent {
         proposal_id,
-        vote_type: vote_type.clone(),
+        voter,
+        vote_type,
         voting_power,
         timestamp: now,
-    });
-
-    VoteCastEvent { proposal_id, voter, vote_type, voting_power, timestamp: now }.publish(env);
+    }
+    .publish(env);
 
     Ok(())
 }
-
 
 // ========================================================================
 // Queue Proposal
@@ -266,12 +297,14 @@ pub fn queue_proposal(
 ) -> Result<ProposalOutcome, GovernanceError> {
     caller.require_auth();
 
-    let config: GovernanceConfig = env.storage()
+    let config: GovernanceConfig = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::Config)
         .ok_or(GovernanceError::NotInitialized)?;
 
-    let mut proposal: Proposal = env.storage()
+    let mut proposal: Proposal = env
+        .storage()
         .persistent()
         .get(&GovernanceDataKey::Proposal(proposal_id))
         .ok_or(GovernanceError::ProposalNotFound)?;
@@ -297,7 +330,9 @@ pub fn queue_proposal(
     // Check expiration (7 days after voting ends)
     if now > proposal.end_time + DEFAULT_TIMELOCK_DURATION {
         proposal.status = ProposalStatus::Expired;
-        env.storage().persistent().set(&GovernanceDataKey::Proposal(proposal_id), &proposal);
+        env.storage()
+            .persistent()
+            .set(&GovernanceDataKey::Proposal(proposal_id), &proposal);
         return Err(GovernanceError::ProposalExpired);
     }
 
@@ -305,11 +340,12 @@ pub fn queue_proposal(
     let total_votes = proposal.for_votes + proposal.against_votes + proposal.abstain_votes;
     let quorum_required = (total_votes * config.quorum_bps as i128) / BASIS_POINTS_SCALE;
     let quorum_reached = total_votes >= quorum_required;
-    
+
     // Check threshold
-    let threshold_votes = (proposal.total_voting_power * proposal.voting_threshold) / BASIS_POINTS_SCALE;
+    let threshold_votes =
+        (proposal.total_voting_power * proposal.voting_threshold) / BASIS_POINTS_SCALE;
     let threshold_met = proposal.for_votes >= threshold_votes;
-    
+
     let succeeded = quorum_reached && threshold_met;
 
     let outcome = ProposalOutcome {
@@ -326,8 +362,10 @@ pub fn queue_proposal(
         let execution_time = now + config.execution_delay;
         proposal.execution_time = Some(execution_time);
         proposal.status = ProposalStatus::Queued;
-        
-        env.storage().persistent().set(&GovernanceDataKey::Proposal(proposal_id), &proposal);
+
+        env.storage()
+            .persistent()
+            .set(&GovernanceDataKey::Proposal(proposal_id), &proposal);
 
         ProposalQueuedEvent {
             proposal_id,
@@ -340,8 +378,10 @@ pub fn queue_proposal(
         .publish(env);
     } else {
         proposal.status = ProposalStatus::Defeated;
-        env.storage().persistent().set(&GovernanceDataKey::Proposal(proposal_id), &proposal);
-        
+        env.storage()
+            .persistent()
+            .set(&GovernanceDataKey::Proposal(proposal_id), &proposal);
+
         ProposalFailedEvent {
             proposal_id,
             for_votes: proposal.for_votes,
@@ -349,7 +389,8 @@ pub fn queue_proposal(
             quorum_reached,
             threshold_met: !succeeded && quorum_reached,
         }
-        .publish(env);    }
+        .publish(env);
+    }
 
     Ok(outcome)
 }
@@ -365,12 +406,14 @@ pub fn execute_proposal(
 ) -> Result<(), GovernanceError> {
     executor.require_auth();
 
-    let config: GovernanceConfig = env.storage()
+    let config: GovernanceConfig = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::Config)
         .ok_or(GovernanceError::NotInitialized)?;
 
-    let mut proposal: Proposal = env.storage()
+    let mut proposal: Proposal = env
+        .storage()
         .persistent()
         .get(&GovernanceDataKey::Proposal(proposal_id))
         .ok_or(GovernanceError::ProposalNotFound)?;
@@ -382,7 +425,8 @@ pub fn execute_proposal(
         return Err(GovernanceError::NotQueued);
     }
 
-    let execution_time = proposal.execution_time
+    let execution_time = proposal
+        .execution_time
         .ok_or(GovernanceError::InvalidExecutionTime)?;
 
     if now < execution_time {
@@ -392,7 +436,9 @@ pub fn execute_proposal(
     // Check timelock expiration
     if now > execution_time + config.timelock_duration {
         proposal.status = ProposalStatus::Expired;
-        env.storage().persistent().set(&GovernanceDataKey::Proposal(proposal_id), &proposal);
+        env.storage()
+            .persistent()
+            .set(&GovernanceDataKey::Proposal(proposal_id), &proposal);
         return Err(GovernanceError::ProposalExpired);
     }
 
@@ -401,12 +447,14 @@ pub fn execute_proposal(
 
     // Update proposal status
     proposal.status = ProposalStatus::Executed;
-    env.storage().persistent().set(&GovernanceDataKey::Proposal(proposal_id), &proposal);
+    env.storage()
+        .persistent()
+        .set(&GovernanceDataKey::Proposal(proposal_id), &proposal);
 
     ProposalExecutedEvent {
         proposal_id,
         executor,
-        timestamp: now
+        timestamp: now,
     }
     .publish(env);
 
@@ -451,12 +499,14 @@ pub fn cancel_proposal(
 ) -> Result<(), GovernanceError> {
     caller.require_auth();
 
-    let admin: Address = env.storage()
+    let admin: Address = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::Admin)
         .ok_or(GovernanceError::NotInitialized)?;
 
-    let mut proposal: Proposal = env.storage()
+    let mut proposal: Proposal = env
+        .storage()
         .persistent()
         .get(&GovernanceDataKey::Proposal(proposal_id))
         .ok_or(GovernanceError::ProposalNotFound)?;
@@ -475,14 +525,16 @@ pub fn cancel_proposal(
     }
 
     proposal.status = ProposalStatus::Cancelled;
-    env.storage().persistent().set(&GovernanceDataKey::Proposal(proposal_id), &proposal);
+    env.storage()
+        .persistent()
+        .set(&GovernanceDataKey::Proposal(proposal_id), &proposal);
 
     let now = env.ledger().timestamp();
 
     ProposalCancelledEvent {
         proposal_id,
         caller,
-        timestamp: now
+        timestamp: now,
     }
     .publish(env);
 
@@ -498,10 +550,10 @@ pub fn approve_proposal(
     approver: Address,
     proposal_id: u64,
 ) -> Result<(), GovernanceError> {
-
     approver.require_auth();
 
-    let multisig_config: MultisigConfig = env.storage()
+    let multisig_config: MultisigConfig = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::MultisigConfig)
         .ok_or(GovernanceError::NotInitialized)?;
@@ -516,7 +568,8 @@ pub fn approve_proposal(
     }
 
     let approvals_key = GovernanceDataKey::ProposalApprovals(proposal_id);
-    let mut approvals: Vec<Address> = env.storage()
+    let mut approvals: Vec<Address> = env
+        .storage()
         .persistent()
         .get(&approvals_key)
         .unwrap_or_else(|| Vec::new(env));
@@ -528,10 +581,9 @@ pub fn approve_proposal(
     approvals.push_back(approver.clone());
     env.storage().persistent().set(&approvals_key, &approvals);
 
-    
     ProposalApprovedEvent {
         proposal_id,
-        approver, 
+        approver,
         timestamp: env.ledger().timestamp(),
     }
     .publish(env);
@@ -547,7 +599,8 @@ pub fn set_multisig_config(
 ) -> Result<(), GovernanceError> {
     caller.require_auth();
 
-    let admin: Address = env.storage()
+    let admin: Address = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::Admin)
         .ok_or(GovernanceError::NotInitialized)?;
@@ -565,7 +618,9 @@ pub fn set_multisig_config(
     }
 
     let config = MultisigConfig { admins, threshold };
-    env.storage().instance().set(&GovernanceDataKey::MultisigConfig, &config);
+    env.storage()
+        .instance()
+        .set(&GovernanceDataKey::MultisigConfig, &config);
 
     Ok(())
 }
@@ -574,14 +629,11 @@ pub fn set_multisig_config(
 // Social Recovery
 // ========================================================================
 
-pub fn add_guardian(
-    env: &Env,
-    caller: Address,
-    guardian: Address,
-) -> Result<(), GovernanceError> {
+pub fn add_guardian(env: &Env, caller: Address, guardian: Address) -> Result<(), GovernanceError> {
     caller.require_auth();
 
-    let admin: Address = env.storage()
+    let admin: Address = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::Admin)
         .ok_or(GovernanceError::NotInitialized)?;
@@ -590,7 +642,8 @@ pub fn add_guardian(
         return Err(GovernanceError::Unauthorized);
     }
 
-    let mut guardian_config: GuardianConfig = env.storage()
+    let mut guardian_config: GuardianConfig = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::GuardianConfig)
         .unwrap_or(GuardianConfig {
@@ -603,14 +656,16 @@ pub fn add_guardian(
     }
 
     guardian_config.guardians.push_back(guardian.clone());
-    env.storage().instance().set(&GovernanceDataKey::GuardianConfig, &guardian_config);
+    env.storage()
+        .instance()
+        .set(&GovernanceDataKey::GuardianConfig, &guardian_config);
 
     let now = env.ledger().timestamp();
 
     GuardianAddedEvent {
         guardian,
         added_by: caller,
-        timestamp: now
+        timestamp: now,
     }
     .publish(env);
 
@@ -624,7 +679,8 @@ pub fn remove_guardian(
 ) -> Result<(), GovernanceError> {
     caller.require_auth();
 
-    let admin: Address = env.storage()
+    let admin: Address = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::Admin)
         .ok_or(GovernanceError::NotInitialized)?;
@@ -633,7 +689,8 @@ pub fn remove_guardian(
         return Err(GovernanceError::Unauthorized);
     }
 
-    let mut guardian_config: GuardianConfig = env.storage()
+    let mut guardian_config: GuardianConfig = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::GuardianConfig)
         .ok_or(GovernanceError::GuardianNotFound)?;
@@ -654,20 +711,22 @@ pub fn remove_guardian(
     }
 
     guardian_config.guardians = new_guardians;
-    
+
     // Adjust threshold if needed
     if guardian_config.threshold > guardian_config.guardians.len() {
         guardian_config.threshold = guardian_config.guardians.len();
     }
 
-    env.storage().instance().set(&GovernanceDataKey::GuardianConfig, &guardian_config);
+    env.storage()
+        .instance()
+        .set(&GovernanceDataKey::GuardianConfig, &guardian_config);
 
     let now = env.ledger().timestamp();
 
     GuardianRemovedEvent {
         guardian,
         removed_by: caller,
-        timestamp: now
+        timestamp: now,
     }
     .publish(env);
 
@@ -681,7 +740,8 @@ pub fn set_guardian_threshold(
 ) -> Result<(), GovernanceError> {
     caller.require_auth();
 
-    let admin: Address = env.storage()
+    let admin: Address = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::Admin)
         .ok_or(GovernanceError::NotInitialized)?;
@@ -690,7 +750,8 @@ pub fn set_guardian_threshold(
         return Err(GovernanceError::Unauthorized);
     }
 
-    let mut guardian_config: GuardianConfig = env.storage()
+    let mut guardian_config: GuardianConfig = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::GuardianConfig)
         .ok_or(GovernanceError::GuardianNotFound)?;
@@ -700,7 +761,9 @@ pub fn set_guardian_threshold(
     }
 
     guardian_config.threshold = threshold;
-    env.storage().instance().set(&GovernanceDataKey::GuardianConfig, &guardian_config);
+    env.storage()
+        .instance()
+        .set(&GovernanceDataKey::GuardianConfig, &guardian_config);
 
     Ok(())
 }
@@ -713,7 +776,8 @@ pub fn start_recovery(
 ) -> Result<(), GovernanceError> {
     initiator.require_auth();
 
-    let guardian_config: GuardianConfig = env.storage()
+    let guardian_config: GuardianConfig = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::GuardianConfig)
         .ok_or(GovernanceError::GuardianNotFound)?;
@@ -749,20 +813,18 @@ pub fn start_recovery(
         new_admin,
         initiator,
         expires_at: request.expires_at,
-        timestamp: now
+        timestamp: now,
     }
     .publish(env);
 
     Ok(())
 }
 
-pub fn approve_recovery(
-    env: &Env,
-    approver: Address,
-) -> Result<(), GovernanceError> {
+pub fn approve_recovery(env: &Env, approver: Address) -> Result<(), GovernanceError> {
     approver.require_auth();
 
-    let guardian_config: GuardianConfig = env.storage()
+    let guardian_config: GuardianConfig = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::GuardianConfig)
         .ok_or(GovernanceError::GuardianNotFound)?;
@@ -772,13 +834,15 @@ pub fn approve_recovery(
     }
 
     let recovery_key = GovernanceDataKey::RecoveryRequest;
-    let _request: RecoveryRequest = env.storage()
+    let _request: RecoveryRequest = env
+        .storage()
         .persistent()
         .get(&recovery_key)
         .ok_or(GovernanceError::NoRecoveryInProgress)?;
 
     let approvals_key = GovernanceDataKey::RecoveryApprovals;
-    let mut approvals: Vec<Address> = env.storage()
+    let mut approvals: Vec<Address> = env
+        .storage()
         .persistent()
         .get(&approvals_key)
         .unwrap_or(Vec::new(env));
@@ -790,33 +854,31 @@ pub fn approve_recovery(
     approvals.push_back(approver.clone());
     env.storage().persistent().set(&approvals_key, &approvals);
 
-
     let now = env.ledger().timestamp();
 
     RecoveryApprovedEvent {
         approver,
         current_approvals: approvals.len(),
         threshold: guardian_config.threshold,
-        timestamp: now
+        timestamp: now,
     }
     .publish(env);
 
     Ok(())
 }
 
-pub fn execute_recovery(
-    env: &Env,
-    executor: Address,
-) -> Result<(), GovernanceError> {
+pub fn execute_recovery(env: &Env, executor: Address) -> Result<(), GovernanceError> {
     executor.require_auth();
 
-    let guardian_config: GuardianConfig = env.storage()
+    let guardian_config: GuardianConfig = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::GuardianConfig)
         .ok_or(GovernanceError::GuardianNotFound)?;
 
     let recovery_key = GovernanceDataKey::RecoveryRequest;
-    let request: RecoveryRequest = env.storage()
+    let request: RecoveryRequest = env
+        .storage()
         .persistent()
         .get(&recovery_key)
         .ok_or(GovernanceError::NoRecoveryInProgress)?;
@@ -828,7 +890,8 @@ pub fn execute_recovery(
     }
 
     let approvals_key = GovernanceDataKey::RecoveryApprovals;
-    let approvals: Vec<Address> = env.storage()
+    let approvals: Vec<Address> = env
+        .storage()
         .persistent()
         .get(&approvals_key)
         .unwrap_or(Vec::new(env));
@@ -838,7 +901,8 @@ pub fn execute_recovery(
     }
 
     // Update admin in multisig config
-    let mut multisig_config: MultisigConfig = env.storage()
+    let mut multisig_config: MultisigConfig = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::MultisigConfig)
         .ok_or(GovernanceError::NotInitialized)?;
@@ -850,9 +914,11 @@ pub fn execute_recovery(
         }
     }
     new_admins.push_back(request.new_admin.clone());
-    
+
     multisig_config.admins = new_admins;
-    env.storage().instance().set(&GovernanceDataKey::MultisigConfig, &multisig_config);
+    env.storage()
+        .instance()
+        .set(&GovernanceDataKey::MultisigConfig, &multisig_config);
 
     // Clear recovery state
     env.storage().persistent().remove(&recovery_key);
@@ -862,7 +928,7 @@ pub fn execute_recovery(
         old_admin: request.old_admin,
         new_admin: request.new_admin,
         executor,
-        timestamp: now
+        timestamp: now,
     }
     .publish(env);
 
@@ -874,11 +940,15 @@ pub fn execute_recovery(
 // ========================================================================
 
 pub fn get_proposal(env: &Env, proposal_id: u64) -> Option<Proposal> {
-    env.storage().persistent().get(&GovernanceDataKey::Proposal(proposal_id))
+    env.storage()
+        .persistent()
+        .get(&GovernanceDataKey::Proposal(proposal_id))
 }
 
 pub fn get_vote(env: &Env, proposal_id: u64, voter: Address) -> Option<VoteInfo> {
-    env.storage().persistent().get(&GovernanceDataKey::Vote(proposal_id, voter))
+    env.storage()
+        .persistent()
+        .get(&GovernanceDataKey::Vote(proposal_id, voter))
 }
 
 pub fn get_config(env: &Env) -> Option<GovernanceConfig> {
@@ -890,50 +960,60 @@ pub fn get_admin(env: &Env) -> Option<Address> {
 }
 
 pub fn get_multisig_config(env: &Env) -> Option<MultisigConfig> {
-    env.storage().instance().get(&GovernanceDataKey::MultisigConfig)
+    env.storage()
+        .instance()
+        .get(&GovernanceDataKey::MultisigConfig)
 }
 
 pub fn get_guardian_config(env: &Env) -> Option<GuardianConfig> {
-    env.storage().instance().get(&GovernanceDataKey::GuardianConfig)
+    env.storage()
+        .instance()
+        .get(&GovernanceDataKey::GuardianConfig)
 }
 
 pub fn get_proposal_approvals(env: &Env, proposal_id: u64) -> Option<Vec<Address>> {
-    env.storage().persistent().get(&GovernanceDataKey::ProposalApprovals(proposal_id))
+    env.storage()
+        .persistent()
+        .get(&GovernanceDataKey::ProposalApprovals(proposal_id))
 }
 
 pub fn get_recovery_request(env: &Env) -> Option<RecoveryRequest> {
-    env.storage().persistent().get(&GovernanceDataKey::RecoveryRequest)
+    env.storage()
+        .persistent()
+        .get(&GovernanceDataKey::RecoveryRequest)
 }
 
 pub fn get_recovery_approvals(env: &Env) -> Option<Vec<Address>> {
-    env.storage().persistent().get(&GovernanceDataKey::RecoveryApprovals)
+    env.storage()
+        .persistent()
+        .get(&GovernanceDataKey::RecoveryApprovals)
 }
 
-pub fn get_proposals(
-    env: &Env,
-    start_id: u64,
-    limit: u32,
-) -> Vec<Proposal> {
+pub fn get_proposals(env: &Env, start_id: u64, limit: u32) -> Vec<Proposal> {
     let mut proposals = Vec::new(env);
-    let max_id: u64 = env.storage()
+    let max_id: u64 = env
+        .storage()
         .instance()
         .get(&GovernanceDataKey::NextProposalId)
         .unwrap_or(0);
-    
+
     let end_id = (start_id + limit as u64).min(max_id);
-    
+
     for id in start_id..end_id {
         if let Some(proposal) = get_proposal(env, id) {
             proposals.push_back(proposal);
         }
     }
-    
+
     proposals
 }
 
 pub fn can_vote(env: &Env, voter: Address, proposal_id: u64) -> bool {
-
-    if env.storage().persistent().has(&GovernanceDataKey::Vote(proposal_id, voter.clone())) {
+    if env
+        .storage()
+        .persistent()
+        .has(&GovernanceDataKey::Vote(proposal_id, voter.clone()))
+    {
         return false;
     }
 
@@ -944,8 +1024,8 @@ pub fn can_vote(env: &Env, voter: Address, proposal_id: u64) -> bool {
 
     let now = env.ledger().timestamp();
 
-    let is_active = matches!(proposal.status, ProposalStatus::Active) || 
-                    (matches!(proposal.status, ProposalStatus::Pending) && now >= proposal.start_time);
+    let is_active = matches!(proposal.status, ProposalStatus::Active)
+        || (matches!(proposal.status, ProposalStatus::Pending) && now >= proposal.start_time);
 
     if !is_active || now > proposal.end_time {
         return false;
