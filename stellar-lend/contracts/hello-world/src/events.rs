@@ -1,39 +1,28 @@
-/// # StellarLend Protocol – Event Logging
-///
-/// Defines a **consistent, structured event schema** for every state-changing
-/// action in the StellarLend protocol.
-///
-/// ## Design principles
-/// - Each event is its own `#[contractevent]` struct. The macro auto-derives
-///   the lowercase snake_case struct name as the leading topic, generates XDR
-///   spec entries, and exposes a `.publish(&env)` method.
-/// - Fields annotated with `#[topic]` become additional Soroban event topics.
-///   All other fields are packed into the event data payload (default format: map).
-/// - `emit_*` helper functions wrap struct construction and call `.publish`,
-///   providing a single call-site per action.
-/// - **No sensitive data**: all fields are publicly observable state only
-///   (`Address`, `Symbol`, `i128`, `u32`, `u64`, `bool`, `Option<Address>`).
-///
-/// ## Off-chain indexing
-/// Events are indexed by contract address + the auto-generated topic (the
-/// snake_case struct name). Consumers retrieve them via Stellar Horizon or a
-/// Soroban event streaming service.
-use soroban_sdk::{contractevent, Address, Env, Symbol};
+//! # StellarLend Protocol – Event Logging
+//!
+//! Defines a **consistent, structured event schema** for every state-changing
+//! action in the StellarLend protocol, including governance operations.
+//!
+//! ## Design principles
+//! - Each event is its own `#[contractevent]` struct. The macro auto-derives
+//!   the lowercase snake_case struct name as the leading topic, generates XDR
+//!   spec entries, and exposes a `.publish(&env)` method.
+//! - Fields annotated with `#[topic]` become additional Soroban event topics.
+//!   All other fields are packed into the event data payload (default format: map).
+//! - `emit_*` helper functions wrap struct construction and call `.publish`,
+//!   providing a single call-site per action.
+//! - **No sensitive data**: all fields are publicly observable state only
+//!   (`Address`, `Symbol`, `i128`, `u32`, `u64`, `bool`, `Option<Address>`).
+#[allow(unused_variables)]
+use soroban_sdk::{contractevent, Address, Env, Symbol, String, Vec};
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Protocol action event structs
-// ─────────────────────────────────────────────────────────────────────────────
+use crate::types::{ProposalType, VoteType, ProposalStatus, AssetStatus};
+
+// ============================================================================
+// Core Lending Events (Existing)
+// ============================================================================
 
 /// Emitted when a user deposits collateral into the protocol.
-///
-/// # Fields
-/// * `user` – The depositor's address.
-/// * `asset` – The deposited asset; `None` for native XLM.
-/// * `amount` – The deposit amount in the asset's smallest unit.
-/// * `timestamp` – Ledger timestamp at deposit time.
-///
-/// # Security
-/// Only the actor's own publicly observable deposit data is recorded.
 #[contractevent]
 #[derive(Clone, Debug)]
 pub struct DepositEvent {
@@ -44,12 +33,6 @@ pub struct DepositEvent {
 }
 
 /// Emitted when a user withdraws collateral from the protocol.
-///
-/// # Fields
-/// * `user` – The withdrawer's address.
-/// * `asset` – The withdrawn asset; `None` for native XLM.
-/// * `amount` – The withdrawal amount in the asset's smallest unit.
-/// * `timestamp` – Ledger timestamp at withdrawal time.
 #[contractevent]
 #[derive(Clone, Debug)]
 pub struct WithdrawalEvent {
@@ -60,12 +43,6 @@ pub struct WithdrawalEvent {
 }
 
 /// Emitted when a user borrows assets from the protocol.
-///
-/// # Fields
-/// * `user` – The borrower's address.
-/// * `asset` – The borrowed asset; `None` for native XLM.
-/// * `amount` – The borrowed amount in the asset's smallest unit.
-/// * `timestamp` – Ledger timestamp at borrow time.
 #[contractevent]
 #[derive(Clone, Debug)]
 pub struct BorrowEvent {
@@ -76,12 +53,6 @@ pub struct BorrowEvent {
 }
 
 /// Emitted when a user repays debt to the protocol.
-///
-/// # Fields
-/// * `user` – The repayer's address.
-/// * `asset` – The repaid asset; `None` for native XLM.
-/// * `amount` – The total amount repaid.
-/// * `timestamp` – Ledger timestamp at repayment time.
 #[contractevent]
 #[derive(Clone, Debug)]
 pub struct RepayEvent {
@@ -92,20 +63,6 @@ pub struct RepayEvent {
 }
 
 /// Emitted when a liquidator liquidates an undercollateralised position.
-///
-/// # Fields
-/// * `liquidator` – The liquidator's address.
-/// * `borrower` – The address of the position being liquidated.
-/// * `debt_asset` – The debt asset; `None` for native XLM.
-/// * `collateral_asset` – The collateral seized; `None` for native XLM.
-/// * `debt_liquidated` – The debt amount repaid by the liquidator.
-/// * `collateral_seized` – The collateral transferred to the liquidator.
-/// * `incentive_amount` – The liquidation bonus (in collateral terms).
-/// * `timestamp` – Ledger timestamp at liquidation time.
-///
-/// # Security
-/// Both liquidator and borrower are public actors.
-/// No private data of uninvolved users is disclosed.
 #[contractevent]
 #[derive(Clone, Debug)]
 pub struct LiquidationEvent {
@@ -120,14 +77,6 @@ pub struct LiquidationEvent {
 }
 
 /// Emitted when a flash loan is initiated.
-///
-/// # Fields
-/// * `user` – The flash loan borrower's address.
-/// * `asset` – The borrowed asset.
-/// * `amount` – The principal.
-/// * `fee` – The fee charged.
-/// * `callback` – The callback contract responsible for repayment.
-/// * `timestamp` – Ledger timestamp at initiation.
 #[contractevent]
 #[derive(Clone, Debug)]
 pub struct FlashLoanInitiatedEvent {
@@ -140,13 +89,6 @@ pub struct FlashLoanInitiatedEvent {
 }
 
 /// Emitted when a flash loan is successfully repaid.
-///
-/// # Fields
-/// * `user` – The repayer's address.
-/// * `asset` – The repaid asset.
-/// * `amount` – The principal repaid.
-/// * `fee` – The fee repaid.
-/// * `timestamp` – Ledger timestamp at repayment.
 #[contractevent]
 #[derive(Clone, Debug)]
 pub struct FlashLoanRepaidEvent {
@@ -158,14 +100,6 @@ pub struct FlashLoanRepaidEvent {
 }
 
 /// Emitted for generic admin-initiated state-changing actions.
-///
-/// # Fields
-/// * `actor` – The admin's address.
-/// * `action` – A symbol identifying the action (e.g. `"initialize"`).
-/// * `timestamp` – Ledger timestamp of the action.
-///
-/// # Security
-/// Only the public admin address is recorded; no credentials exposed.
 #[contractevent]
 #[derive(Clone, Debug)]
 pub struct AdminActionEvent {
@@ -175,14 +109,6 @@ pub struct AdminActionEvent {
 }
 
 /// Emitted when an oracle price is updated.
-///
-/// # Fields
-/// * `actor` – The address that submitted the price update.
-/// * `asset` – The asset whose price was updated.
-/// * `price` – The new price (in oracle's native units).
-/// * `decimals` – Number of decimal places for the price.
-/// * `oracle` – The oracle contract address.
-/// * `timestamp` – Ledger timestamp at update time.
 #[contractevent]
 #[derive(Clone, Debug)]
 pub struct PriceUpdatedEvent {
@@ -195,12 +121,6 @@ pub struct PriceUpdatedEvent {
 }
 
 /// Emitted when risk parameters are updated by an admin.
-///
-/// # Fields
-/// * `actor` – The admin's address.
-/// * `timestamp` – Ledger timestamp of the update.
-///
-/// Note: individual parameter values can be queried from contract state.
 #[contractevent]
 #[derive(Clone, Debug)]
 pub struct RiskParamsUpdatedEvent {
@@ -209,13 +129,6 @@ pub struct RiskParamsUpdatedEvent {
 }
 
 /// Emitted when the pause state of any protocol operation changes.
-///
-/// # Fields
-/// * `actor` – The admin's address.
-/// * `operation` – Symbol for the paused/unpaused operation
-///   (e.g. `"pause_deposit"`, `"pause_borrow"`, `"emergency"`).
-/// * `paused` – `true` if paused, `false` if unpaused.
-/// * `timestamp` – Ledger timestamp of the change.
 #[contractevent]
 #[derive(Clone, Debug)]
 pub struct PauseStateChangedEvent {
@@ -225,76 +138,7 @@ pub struct PauseStateChangedEvent {
     pub timestamp: u64,
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Emitter helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Emit a deposit event.
-/// Call this after successfully updating collateral storage.
-pub fn emit_deposit(e: &Env, event: DepositEvent) {
-    event.publish(e);
-}
-
-/// Emit a withdrawal event.
-/// Call this after successfully updating collateral storage.
-pub fn emit_withdrawal(e: &Env, event: WithdrawalEvent) {
-    event.publish(e);
-}
-
-/// Emit a borrow event.
-/// Call this after successfully updating debt storage.
-pub fn emit_borrow(e: &Env, event: BorrowEvent) {
-    event.publish(e);
-}
-
-/// Emit a repay event.
-/// Call this after successfully reducing debt storage.
-pub fn emit_repay(e: &Env, event: RepayEvent) {
-    event.publish(e);
-}
-
-/// Emit a liquidation event.
-/// Call this after the debt repayment and collateral seizure are committed.
-pub fn emit_liquidation(e: &Env, event: LiquidationEvent) {
-    event.publish(e);
-}
-
-/// Emit a flash-loan-initiated event.
-/// Call this after the flash loan record is stored and tokens transferred.
-pub fn emit_flash_loan_initiated(e: &Env, event: FlashLoanInitiatedEvent) {
-    event.publish(e);
-}
-
-/// Emit a flash-loan-repaid event.
-/// Call this after the record is cleared and repayment received.
-pub fn emit_flash_loan_repaid(e: &Env, event: FlashLoanRepaidEvent) {
-    event.publish(e);
-}
-
-/// Emit an admin-action event.
-/// Use for initialization or admin operations without a dedicated event type.
-pub fn emit_admin_action(e: &Env, event: AdminActionEvent) {
-    event.publish(e);
-}
-
-/// Emit a price-updated event.
-/// Call this after committing a new oracle price to storage.
-pub fn emit_price_updated(e: &Env, event: PriceUpdatedEvent) {
-    event.publish(e);
-}
-
-/// Emit a risk-params-updated event.
-/// Call this after risk configuration has been written to storage.
-pub fn emit_risk_params_updated(e: &Env, event: RiskParamsUpdatedEvent) {
-    event.publish(e);
-}
-
-/// Emit a pause-state-changed event.
-/// Call this after any pause switch (including emergency) is toggled.
-pub fn emit_pause_state_changed(e: &Env, event: PauseStateChangedEvent) {
-    event.publish(e);
-}
-
+/// Emitted when a user's position is updated.
 #[contractevent]
 #[derive(Clone, Debug)]
 pub struct PositionUpdatedEvent {
@@ -303,15 +147,17 @@ pub struct PositionUpdatedEvent {
     pub debt: i128,
 }
 
+/// Emitted when analytics data is updated.
 #[contractevent]
 #[derive(Clone, Debug)]
 pub struct AnalyticsUpdatedEvent {
     pub user: Address,
-    pub activity_type: soroban_sdk::String,
+    pub activity_type: String,
     pub amount: i128,
     pub timestamp: u64,
 }
 
+/// Emitted when user activity is tracked.
 #[contractevent]
 #[derive(Clone, Debug)]
 pub struct UserActivityTrackedEvent {
@@ -319,6 +165,303 @@ pub struct UserActivityTrackedEvent {
     pub operation: Symbol,
     pub amount: i128,
     pub timestamp: u64,
+}
+
+// ============================================================================
+// Asset-Specific Events (Carbon Asset Style)
+// ============================================================================
+
+/// Emitted when an asset is minted.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct MintEvent {
+    pub token_id: u32,
+    pub owner: Address,
+    pub project_id: String,
+    pub vintage_year: u64,
+    pub methodology_id: u32,
+}
+
+/// Emitted when an asset is transferred.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct TransferEvent {
+    pub token_id: u32,
+    pub from: Address,
+    pub to: Address,
+}
+
+/// Emitted when asset status changes.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct StatusChangeEvent {
+    pub token_id: u32,
+    pub old_status: Option<AssetStatus>,
+    pub new_status: AssetStatus,
+    pub changed_by: Address,
+}
+
+/// Emitted when quality score is updated.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct QualityScoreUpdatedEvent {
+    pub token_id: u32,
+    pub old_score: i128,
+    pub new_score: i128,
+    pub updated_by: Address,
+}
+
+/// SEP-41 style approve event.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct ApproveEvent {
+    pub from: Address,
+    pub spender: Address,
+    pub amount: i128,
+    pub live_until_ledger: u32,
+}
+
+/// SEP-41 style transfer event.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct Sep41TransferEvent {
+    pub from: Address,
+    pub to: Address,
+    pub amount: i128,
+}
+
+/// SEP-41 style burn event.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct Sep41BurnEvent {
+    pub from: Address,
+    pub amount: i128,
+}
+
+// ============================================================================
+// Governance Events
+// ============================================================================
+
+/// Emitted when governance system is initialized.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct GovernanceInitializedEvent {
+    pub admin: Address,
+    pub vote_token: Address,
+    pub voting_period: u64,
+    pub quorum_bps: u32,
+    pub timestamp: u64,
+}
+
+/// Emitted when a new proposal is created.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct ProposalCreatedEvent {
+    pub proposal_id: u64,
+    pub proposer: Address,
+    pub proposal_type: ProposalType,
+    pub description: String,
+    pub start_time: u64,
+    pub end_time: u64,
+    pub created_at: u64,
+}
+
+/// Emitted when a vote is cast on a proposal.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct VoteCastEvent {
+    pub proposal_id: u64,
+    pub voter: Address,
+    pub vote_type: VoteType,
+    pub voting_power: i128,
+    pub timestamp: u64,
+}
+
+/// Emitted when a proposal is queued for execution.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct ProposalQueuedEvent {
+    pub proposal_id: u64,
+    pub execution_time: u64,
+    pub for_votes: i128,
+    pub against_votes: i128,
+    pub quorum_reached: bool,
+    pub threshold_met: bool,
+}
+
+/// Emitted when a proposal is executed.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct ProposalExecutedEvent {
+    pub proposal_id: u64,
+    pub executor: Address,
+    pub timestamp: u64,
+}
+
+/// Emitted when a proposal fails.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct ProposalFailedEvent {
+    pub proposal_id: u64,
+    pub for_votes: i128,
+    pub against_votes: i128,
+    pub quorum_reached: bool,
+    pub threshold_met: bool,
+}
+
+/// Emitted when a proposal is cancelled.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct ProposalCancelledEvent {
+    pub proposal_id: u64,
+    pub caller: Address,
+    pub timestamp: u64,
+}
+
+/// Emitted when a multisig admin approves a proposal.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct ProposalApprovedEvent {
+    pub proposal_id: u64,
+    pub approver: Address,
+    pub timestamp: u64,
+}
+
+/// Emitted when governance configuration is updated.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct GovernanceConfigUpdatedEvent {
+    pub admin: Address,
+    pub voting_period: Option<u64>,
+    pub execution_delay: Option<u64>,
+    pub quorum_bps: Option<u32>,
+    pub proposal_threshold: Option<i128>,
+    pub timestamp: u64,
+}
+
+// ============================================================================
+// Multisig Events
+// ============================================================================
+
+/// Emitted when multisig configuration is updated.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct MultisigConfigUpdatedEvent {
+    pub admin: Address,
+    pub admins: Vec<Address>,
+    pub threshold: u32,
+    pub timestamp: u64,
+}
+
+// ============================================================================
+// Guardian & Recovery Events
+// ============================================================================
+
+/// Emitted when a guardian is added.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct GuardianAddedEvent {
+    pub guardian: Address,
+    pub added_by: Address,
+    pub timestamp: u64,
+}
+
+/// Emitted when a guardian is removed.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct GuardianRemovedEvent {
+    pub guardian: Address,
+    pub removed_by: Address,
+    pub timestamp: u64,
+}
+
+/// Emitted when guardian threshold is updated.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct GuardianThresholdUpdatedEvent {
+    pub admin: Address,
+    pub old_threshold: u32,
+    pub new_threshold: u32,
+    pub timestamp: u64,
+}
+
+/// Emitted when a recovery process is started.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct RecoveryStartedEvent {
+    pub old_admin: Address,
+    pub new_admin: Address,
+    pub initiator: Address,
+    pub expires_at: u64,
+    pub timestamp: u64,
+}
+
+/// Emitted when a recovery request is approved by a guardian.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct RecoveryApprovedEvent {
+    pub approver: Address,
+    pub current_approvals: u32,
+    pub threshold: u32,
+    pub timestamp: u64,
+}
+
+/// Emitted when recovery is executed and admin is changed.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct RecoveryExecutedEvent {
+    pub old_admin: Address,
+    pub new_admin: Address,
+    pub executor: Address,
+    pub timestamp: u64,
+}
+
+// ============================================================================
+// Core Lending Emitter Helpers
+// ============================================================================
+
+pub fn emit_deposit(e: &Env, event: DepositEvent) {
+    event.publish(e);
+}
+
+pub fn emit_withdrawal(e: &Env, event: WithdrawalEvent) {
+    event.publish(e);
+}
+
+pub fn emit_borrow(e: &Env, event: BorrowEvent) {
+    event.publish(e);
+}
+
+pub fn emit_repay(e: &Env, event: RepayEvent) {
+    event.publish(e);
+}
+
+pub fn emit_liquidation(e: &Env, event: LiquidationEvent) {
+    event.publish(e);
+}
+
+pub fn emit_flash_loan_initiated(e: &Env, event: FlashLoanInitiatedEvent) {
+    event.publish(e);
+}
+
+pub fn emit_flash_loan_repaid(e: &Env, event: FlashLoanRepaidEvent) {
+    event.publish(e);
+}
+
+pub fn emit_admin_action(e: &Env, event: AdminActionEvent) {
+    event.publish(e);
+}
+
+pub fn emit_price_updated(e: &Env, event: PriceUpdatedEvent) {
+    event.publish(e);
+}
+
+pub fn emit_risk_params_updated(e: &Env, event: RiskParamsUpdatedEvent) {
+    event.publish(e);
+}
+
+pub fn emit_pause_state_changed(e: &Env, event: PauseStateChangedEvent) {
+    event.publish(e);
 }
 
 pub fn emit_position_updated(e: &Env, event: PositionUpdatedEvent) {
@@ -330,5 +473,113 @@ pub fn emit_analytics_updated(e: &Env, event: AnalyticsUpdatedEvent) {
 }
 
 pub fn emit_user_activity_tracked(e: &Env, event: UserActivityTrackedEvent) {
+    event.publish(e);
+}
+
+// ============================================================================
+// Asset-Specific Emitter Helpers
+// ============================================================================
+
+pub fn emit_mint(e: &Env, event: MintEvent) {
+    event.publish(e);
+}
+
+pub fn emit_transfer(e: &Env, event: TransferEvent) {
+    event.publish(e);
+}
+
+pub fn emit_status_change(e: &Env, event: StatusChangeEvent) {
+    event.publish(e);
+}
+
+pub fn emit_quality_score_updated(e: &Env, event: QualityScoreUpdatedEvent) {
+    event.publish(e);
+}
+
+pub fn emit_approve(e: &Env, event: ApproveEvent) {
+    event.publish(e);
+}
+
+pub fn emit_sep41_transfer(e: &Env, event: Sep41TransferEvent) {
+    event.publish(e);
+}
+
+pub fn emit_sep41_burn(e: &Env, event: Sep41BurnEvent) {
+    event.publish(e);
+}
+
+// ============================================================================
+// Governance Emitter Helpers
+// ============================================================================
+
+pub fn emit_governance_initialized(e: &Env, event: GovernanceInitializedEvent) {
+    event.publish(e);
+}
+
+pub fn emit_proposal_created(e: &Env, event: ProposalCreatedEvent) {
+    event.publish(e);
+}
+
+pub fn emit_vote_cast(e: &Env, event: VoteCastEvent) {
+    event.publish(e);
+}
+
+pub fn emit_proposal_queued(e: &Env, event: ProposalQueuedEvent) {
+    event.publish(e);
+}
+
+pub fn emit_proposal_executed(e: &Env, event: ProposalExecutedEvent) {
+    event.publish(e);
+}
+
+pub fn emit_proposal_failed(e: &Env, event: ProposalFailedEvent) {
+    event.publish(e);
+}
+
+pub fn emit_proposal_cancelled(e: &Env, event: ProposalCancelledEvent) {
+    event.publish(e);
+}
+
+pub fn emit_proposal_approved(e: &Env, event: ProposalApprovedEvent) {
+    event.publish(e);
+}
+
+pub fn emit_governance_config_updated(e: &Env, event: GovernanceConfigUpdatedEvent) {
+    event.publish(e);
+}
+
+// ============================================================================
+// Multisig Emitter Helpers
+// ============================================================================
+
+pub fn emit_multisig_config_updated(e: &Env, event: MultisigConfigUpdatedEvent) {
+    event.publish(e);
+}
+
+// ============================================================================
+// Guardian & Recovery Emitter Helpers
+// ============================================================================
+
+pub fn emit_guardian_added(e: &Env, event: GuardianAddedEvent) {
+    event.publish(e);
+}
+
+pub fn emit_guardian_removed(e: &Env, event: GuardianRemovedEvent) {
+    event.publish(e);
+}
+
+pub fn emit_guardian_threshold_updated(e: &Env, event: GuardianThresholdUpdatedEvent) {
+    event.publish(e);
+}
+
+pub fn emit_recovery_started(e: &Env, event: RecoveryStartedEvent) {
+    event.publish(e);
+}
+
+pub fn emit_recovery_approved(e: &Env, event: RecoveryApprovedEvent) {
+    event.publish(e);
+}
+
+pub fn emit_recovery_executed(e: &Env, event: RecoveryExecutedEvent) {
     event.publish(e);
 }

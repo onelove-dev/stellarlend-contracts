@@ -9,6 +9,8 @@
 ///   - `Address` – contract that emitted the event
 ///   - `Vec<Val>` – topic(s) tuple
 ///   - `Val` – event data payload
+
+#[allow(unused_variables)]
 use crate::events::{
     emit_admin_action, emit_borrow, emit_deposit, emit_flash_loan_initiated,
     emit_flash_loan_repaid, emit_liquidation, emit_pause_state_changed, emit_price_updated,
@@ -16,7 +18,11 @@ use crate::events::{
     DepositEvent, FlashLoanInitiatedEvent, FlashLoanRepaidEvent, LiquidationEvent,
     PauseStateChangedEvent, PriceUpdatedEvent, RepayEvent, RiskParamsUpdatedEvent, WithdrawalEvent,
 };
+
+#[allow(unused_variables)]
 use crate::{HelloContract, HelloContractClient};
+
+#[allow(unused_variables)]
 use soroban_sdk::{
     contracttype,
     testutils::{Address as _, Events},

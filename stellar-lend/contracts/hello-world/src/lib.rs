@@ -12,17 +12,13 @@
 //! - **Oracle integration**: price feeds with staleness checks and fallbacks
 //! - **Flash loans**: uncollateralized single-transaction loans
 //! - **Analytics**: protocol and user reporting
-//!
-//! ## Invariants
-//! - All positions must maintain the minimum collateral ratio or face liquidation.
-//! - Interest accrues continuously based on protocol utilization.
-//! - Only the admin can modify risk parameters, oracle config, and pause switches.
-//! - Emergency pause halts all operations immediately.
+//! - **Governance**: on-chain proposal voting and execution
 
 #![allow(clippy::too_many_arguments)]
 #![allow(deprecated)]
 #![no_std]
-use soroban_sdk::{contract, contractimpl, Address, Env, Map, String, Symbol};
+
+use soroban_sdk::{contract, contractimpl, Address, Env, Map, String, Symbol, Vec};
 
 mod borrow;
 mod deposit;
@@ -30,10 +26,15 @@ mod events;
 mod repay;
 mod risk_management;
 mod withdraw;
+mod errors;
+mod types;
+mod storage;
 
 use borrow::borrow_asset;
 use deposit::deposit_collateral;
 use repay::repay_debt;
+
+#[allow(unused_variables)]
 use risk_management::{
     can_be_liquidated, get_close_factor, get_liquidation_incentive,
     get_liquidation_incentive_amount, get_liquidation_threshold, get_max_liquidatable_amount,
@@ -44,10 +45,13 @@ use risk_management::{
 use withdraw::withdraw_collateral;
 
 mod analytics;
+
+#[allow(unused_variables)]
 use analytics::{
     generate_protocol_report, generate_user_report, get_recent_activity, get_user_activity_feed,
     AnalyticsError, ProtocolReport, UserReport,
 };
+
 mod cross_asset;
 #[allow(unused_imports)]
 use cross_asset::{
@@ -82,7 +86,16 @@ use interest_rate::{
     InterestRateError,
 };
 
-pub mod governance;
+mod governance;
+
+use storage::GuardianConfig;
+
+// Governance module
+use crate::types::{
+    Proposal, ProposalOutcome, ProposalType, VoteType, VoteInfo,
+    MultisigConfig, RecoveryRequest, GovernanceConfig
+};
+// use crate::governance::self;
 
 /// The StellarLend core contract.
 ///
@@ -101,28 +114,25 @@ impl HelloContract {
         String::from_str(&env, "Hello")
     }
 
-    /// Initialize the contract with admin address and governance contract ID.
+    /// Initialize the contract with admin address.
     ///
     /// Sets up the risk management system and interest rate model with default parameters.
     /// Must be called before any other operations.
     ///
     /// # Arguments
     /// * `admin` - The admin address
-    /// * `governance_id` - The address of the deployed governance contract
     ///
     /// # Returns
     /// Returns Ok(()) on success
     pub fn initialize(env: Env, admin: Address) -> Result<(), RiskManagementError> {
         initialize_risk_management(&env, admin.clone())?;
-        // Initialize interest rate config with default parameters
-        initialize_interest_rate_config(&env, admin.clone()).map_err(|e| {
+        initialize_interest_rate_config(&env, admin).map_err(|e| {
             if e == InterestRateError::AlreadyInitialized {
                 RiskManagementError::AlreadyInitialized
             } else {
                 RiskManagementError::Unauthorized
             }
         })?;
-        // initialize_governance(&env, admin).map_err(|_| RiskManagementError::Unauthorized)?;
         Ok(())
     }
 
@@ -511,6 +521,7 @@ impl HelloContract {
     ) -> Result<soroban_sdk::Vec<analytics::ActivityEntry>, AnalyticsError> {
         get_user_activity_feed(&env, &user, limit, offset)
     }
+
     /// Update price feed from oracle
     ///
     /// Updates the price for an asset from an oracle source with validation.
@@ -1081,243 +1092,324 @@ impl HelloContract {
     }
 
     // ============================================================================
-    // Cross-Asset / Asset Configuration Methods
+    // Governance Entrypoints
     // ============================================================================
 
-    /// Initialize cross-asset lending module (admin only)
+    /// Initialize governance module
     ///
-    /// Sets up the cross-asset lending system with an admin.
-    /// Must be called before any asset configuration.
+    /// Sets up the governance system with voting token and parameters.
+    /// Must be called after contract initialization.
     ///
     /// # Arguments
     /// * `admin` - The admin address
+    /// * `vote_token` - Token contract address used for voting
+    /// * `voting_period` - Optional voting duration in seconds
+    /// * `execution_delay` - Optional delay before execution in seconds
+    /// * `quorum_bps` - Optional quorum requirement in basis points
+    /// * `proposal_threshold` - Optional minimum tokens to create proposal
+    /// * `timelock_duration` - Optional timelock duration in seconds
+    /// * `default_voting_threshold` - Optional default voting threshold in basis points
     ///
     /// # Returns
     /// Returns Ok(()) on success
-    pub fn initialize_ca(env: Env, admin: Address) -> Result<(), CrossAssetError> {
-        initialize(&env, admin)
-    }
-
-    /// Initialize/register a new asset with configuration
-    ///
-    /// Registers an asset with its collateral factor (LTV), liquidation threshold,
-    /// debt ceiling, and other parameters. Admin only.
-    ///
-    /// # Arguments
-    /// * `asset` - Asset address (None for native XLM)
-    /// * `config` - Complete asset configuration
-    ///
-    /// # Returns
-    /// Returns Ok(()) on success
-    pub fn initialize_asset(
+    pub fn gov_initialize(
         env: Env,
-        asset: Option<Address>,
-        config: AssetConfig,
-    ) -> Result<(), CrossAssetError> {
-        initialize_asset(&env, asset, config)
-    }
-
-    /// Update asset configuration (admin only)
-    ///
-    /// Updates asset parameters including LTV, liquidation threshold, debt ceiling,
-    /// and collateral/borrow enablement. Only provided fields are updated.
-    ///
-    /// # Arguments
-    /// * `asset` - Asset address (None for XLM)
-    /// * `collateral_factor` - Optional new LTV in basis points
-    /// * `liquidation_threshold` - Optional new liquidation threshold in basis points
-    /// * `max_supply` - Optional new supply cap
-    /// * `max_borrow` - Optional new debt ceiling
-    /// * `can_collateralize` - Optional flag to enable/disable as collateral
-    /// * `can_borrow` - Optional flag to enable/disable borrowing
-    ///
-    /// # Returns
-    /// Returns Ok(()) on success
-    #[allow(clippy::too_many_arguments)]
-    pub fn update_asset_config(
-        env: Env,
-        asset: Option<Address>,
-        collateral_factor: Option<i128>,
-        liquidation_threshold: Option<i128>,
-        max_supply: Option<i128>,
-        max_borrow: Option<i128>,
-        can_collateralize: Option<bool>,
-        can_borrow: Option<bool>,
-    ) -> Result<(), CrossAssetError> {
-        update_asset_config(
-            &env,
-            asset,
-            collateral_factor,
-            liquidation_threshold,
-            max_supply,
-            max_borrow,
-            can_collateralize,
-            can_borrow,
+        admin: Address,
+        vote_token: Address,
+        voting_period: Option<u64>,
+        execution_delay: Option<u64>,
+        quorum_bps: Option<u32>,
+        proposal_threshold: Option<i128>,
+        timelock_duration: Option<u64>,
+        default_voting_threshold: Option<i128>,
+    ) -> Result<(), errors::GovernanceError> {
+        governance::initialize(
+            &env, 
+            admin, 
+            vote_token, 
+            voting_period, 
+            execution_delay,
+            quorum_bps, 
+            proposal_threshold, 
+            timelock_duration, 
+            default_voting_threshold,
         )
     }
 
-    /// Update asset price (admin/oracle only)
-    ///
-    /// Updates the price for an asset used in health factor calculations.
+    /// Create a new governance proposal
     ///
     /// # Arguments
-    /// * `asset` - Asset address (None for XLM)
-    /// * `price` - New price in base units (7 decimals)
+    /// * `proposer` - Address creating the proposal
+    /// * `proposal_type` - Type of proposal (parameter change, pause, etc.)
+    /// * `description` - Description of the proposal
+    /// * `voting_threshold` - Optional custom voting threshold
+    ///
+    /// # Returns
+    /// Returns the new proposal ID
+    pub fn gov_create_proposal(
+        env: Env,
+        proposer: Address,
+        proposal_type: ProposalType,
+        description: String,
+        voting_threshold: Option<i128>,
+    ) -> Result<u64, errors::GovernanceError> {
+        governance::create_proposal(&env, proposer, proposal_type, description, voting_threshold)
+    }
+
+    /// Cast a vote on a proposal
+    ///
+    /// # Arguments
+    /// * `voter` - Address casting the vote
+    /// * `proposal_id` - ID of the proposal to vote on
+    /// * `vote_type` - Vote choice (For, Against, Abstain)
     ///
     /// # Returns
     /// Returns Ok(()) on success
-    pub fn update_asset_price(
+    pub fn gov_vote(
         env: Env,
-        asset: Option<Address>,
-        price: i128,
-    ) -> Result<(), CrossAssetError> {
-        update_asset_price(&env, asset, price)
+        voter: Address,
+        proposal_id: u64,
+        vote_type: VoteType,
+    ) -> Result<(), errors::GovernanceError> {
+        governance::vote(&env, voter, proposal_id, vote_type)
     }
 
-    /// Get asset configuration
-    ///
-    /// Returns the configuration for a specific asset including LTV,
-    /// liquidation threshold, debt ceiling, etc.
+    /// Queue a successful proposal for execution
     ///
     /// # Arguments
-    /// * `asset` - Asset address (None for XLM)
+    /// * `caller` - Address queuing the proposal
+    /// * `proposal_id` - ID of the proposal to queue
     ///
     /// # Returns
-    /// Asset configuration
-    pub fn get_asset_config(
+    /// Returns the proposal outcome
+    pub fn gov_queue_proposal(
         env: Env,
-        asset: Option<Address>,
-    ) -> Result<AssetConfig, CrossAssetError> {
-        get_asset_config_by_address(&env, asset)
+        caller: Address,
+        proposal_id: u64,
+    ) -> Result<ProposalOutcome, errors::GovernanceError> {
+        governance::queue_proposal(&env, caller, proposal_id)
     }
 
-    /// Get list of all configured assets
-    ///
-    /// Returns all assets that have been registered in the system.
-    ///
-    /// # Returns
-    /// Vector of asset keys
-    pub fn get_asset_list(env: Env) -> soroban_sdk::Vec<AssetKey> {
-        get_asset_list(&env)
-    }
-
-    /// Deposit collateral for cross-asset lending
-    ///
-    /// Deposits collateral that can be used across multiple assets.
-    /// Asset must be enabled for collateral.
+    /// Execute a queued proposal
     ///
     /// # Arguments
-    /// * `user` - User address
-    /// * `asset` - Asset address (None for XLM)
-    /// * `amount` - Amount to deposit
+    /// * `executor` - Address executing the proposal
+    /// * `proposal_id` - ID of the proposal to execute
     ///
     /// # Returns
-    /// Updated asset position
-    pub fn cross_asset_deposit(
+    /// Returns Ok(()) on success
+    pub fn gov_execute_proposal(
         env: Env,
-        user: Address,
-        asset: Option<Address>,
-        amount: i128,
-    ) -> Result<AssetPosition, CrossAssetError> {
-        cross_asset_deposit(&env, user, asset, amount)
+        executor: Address,
+        proposal_id: u64,
+    ) -> Result<(), errors::GovernanceError> {
+        governance::execute_proposal(&env, executor, proposal_id)
     }
 
-    /// Withdraw collateral from cross-asset lending
+    /// Cancel a proposal
     ///
-    /// Withdraws collateral while maintaining healthy position.
+    /// Only proposer or admin can cancel.
     ///
     /// # Arguments
-    /// * `user` - User address
-    /// * `asset` - Asset address (None for XLM)
-    /// * `amount` - Amount to withdraw
+    /// * `caller` - Address cancelling the proposal
+    /// * `proposal_id` - ID of the proposal to cancel
     ///
     /// # Returns
-    /// Updated asset position
-    pub fn cross_asset_withdraw(
+    /// Returns Ok(()) on success
+    pub fn gov_cancel_proposal(
         env: Env,
-        user: Address,
-        asset: Option<Address>,
-        amount: i128,
-    ) -> Result<AssetPosition, CrossAssetError> {
-        cross_asset_withdraw(&env, user, asset, amount)
+        caller: Address,
+        proposal_id: u64,
+    ) -> Result<(), errors::GovernanceError> {
+        governance::cancel_proposal(&env, caller, proposal_id)
     }
 
-    /// Borrow asset in cross-asset lending
-    ///
-    /// Borrows against cross-asset collateral. Respects LTV and debt ceiling.
+    /// Approve a proposal as multisig admin
     ///
     /// # Arguments
-    /// * `user` - User address
-    /// * `asset` - Asset address (None for XLM)
-    /// * `amount` - Amount to borrow
+    /// * `approver` - Admin address approving the proposal
+    /// * `proposal_id` - ID of the proposal to approve
     ///
     /// # Returns
-    /// Updated asset position
-    pub fn cross_asset_borrow(
+    /// Returns Ok(()) on success
+    pub fn gov_approve_proposal(
         env: Env,
-        user: Address,
-        asset: Option<Address>,
-        amount: i128,
-    ) -> Result<AssetPosition, CrossAssetError> {
-        cross_asset_borrow(&env, user, asset, amount)
+        approver: Address,
+        proposal_id: u64,
+    ) -> Result<(), errors::GovernanceError> {
+        governance::approve_proposal(&env, approver, proposal_id)
     }
 
-    /// Repay borrowed asset
-    ///
-    /// Repays debt for a specific asset.
+    /// Set multisig configuration
     ///
     /// # Arguments
-    /// * `user` - User address
-    /// * `asset` - Asset address (None for XLM)
-    /// * `amount` - Amount to repay
+    /// * `caller` - Caller address (must be admin)
+    /// * `admins` - Vector of admin addresses
+    /// * `threshold` - Number of approvals required
     ///
     /// # Returns
-    /// Updated asset position
-    pub fn cross_asset_repay(
+    /// Returns Ok(()) on success
+    pub fn gov_set_multisig_config(
         env: Env,
-        user: Address,
-        asset: Option<Address>,
-        amount: i128,
-    ) -> Result<AssetPosition, CrossAssetError> {
-        cross_asset_repay(&env, user, asset, amount)
+        caller: Address,
+        admins: Vec<Address>,
+        threshold: u32,
+    ) -> Result<(), errors::GovernanceError> {
+        governance::set_multisig_config(&env, caller, admins, threshold)
     }
 
-    /// Get user's position for a specific asset
-    ///
-    /// Returns collateral and debt for a user in a specific asset.
+    /// Add a guardian
     ///
     /// # Arguments
-    /// * `user` - User address
-    /// * `asset` - Asset address (None for XLM)
+    /// * `caller` - Caller address (must be admin)
+    /// * `guardian` - Guardian address to add
     ///
     /// # Returns
-    /// Asset position
-    pub fn get_user_asset_position(
+    /// Returns Ok(()) on success
+    pub fn gov_add_guardian(
         env: Env,
-        user: Address,
-        asset: Option<Address>,
-    ) -> AssetPosition {
-        get_user_asset_position(&env, &user, asset)
+        caller: Address,
+        guardian: Address,
+    ) -> Result<(), errors::GovernanceError> {
+        governance::add_guardian(&env, caller, guardian)
     }
 
-    /// Get user's unified position summary across all assets
-    ///
-    /// Calculates health factor, liquidation status, and borrow capacity
-    /// across all assets.
+    /// Remove a guardian
     ///
     /// # Arguments
-    /// * `user` - User address
+    /// * `caller` - Caller address (must be admin)
+    /// * `guardian` - Guardian address to remove
     ///
     /// # Returns
-    /// Position summary with health factor
-    pub fn get_user_position_summary(
+    /// Returns Ok(()) on success
+    pub fn gov_remove_guardian(
         env: Env,
-        user: Address,
-    ) -> Result<UserPositionSummary, CrossAssetError> {
-        get_user_position_summary(&env, &user)
+        caller: Address,
+        guardian: Address,
+    ) -> Result<(), errors::GovernanceError> {
+        governance::remove_guardian(&env, caller, guardian)
+    }
+
+    /// Set guardian threshold
+    ///
+    /// # Arguments
+    /// * `caller` - Caller address (must be admin)
+    /// * `threshold` - Number of guardian approvals required for recovery
+    ///
+    /// # Returns
+    /// Returns Ok(()) on success
+    pub fn gov_set_guardian_threshold(
+        env: Env,
+        caller: Address,
+        threshold: u32,
+    ) -> Result<(), errors::GovernanceError> {
+        governance::set_guardian_threshold(&env, caller, threshold)
+    }
+
+    /// Start recovery process
+    ///
+    /// # Arguments
+    /// * `initiator` - Guardian initiating recovery
+    /// * `old_admin` - Current admin to replace
+    /// * `new_admin` - New admin address
+    ///
+    /// # Returns
+    /// Returns Ok(()) on success
+    pub fn gov_start_recovery(
+        env: Env,
+        initiator: Address,
+        old_admin: Address,
+        new_admin: Address,
+    ) -> Result<(), errors::GovernanceError> {
+        governance::start_recovery(&env, initiator, old_admin, new_admin)
+    }
+
+    /// Approve recovery
+    ///
+    /// # Arguments
+    /// * `approver` - Guardian approving recovery
+    ///
+    /// # Returns
+    /// Returns Ok(()) on success
+    pub fn gov_approve_recovery(
+        env: Env,
+        approver: Address,
+    ) -> Result<(), errors::GovernanceError> {
+        governance::approve_recovery(&env, approver)
+    }
+
+    /// Execute recovery
+    ///
+    /// # Arguments
+    /// * `executor` - Address executing recovery
+    ///
+    /// # Returns
+    /// Returns Ok(()) on success
+    pub fn gov_execute_recovery(
+        env: Env,
+        executor: Address,
+    ) -> Result<(), errors::GovernanceError> {
+        governance::execute_recovery(&env, executor)
     }
 
     // ============================================================================
+    // Governance Query Functions
+    // ============================================================================
+
+    /// Get proposal by ID
+    pub fn gov_get_proposal(env: Env, proposal_id: u64) -> Option<Proposal> {
+        governance::get_proposal(&env, proposal_id)
+    }
+
+    /// Get vote information
+    pub fn gov_get_vote(env: Env, proposal_id: u64, voter: Address) -> Option<VoteInfo> {
+        governance::get_vote(&env, proposal_id, voter)
+    }
+
+    /// Get governance configuration
+    pub fn gov_get_config(env: Env) -> Option<GovernanceConfig> {
+        governance::get_config(&env)
+    }
+
+    /// Get governance admin
+    pub fn gov_get_admin(env: Env) -> Option<Address> {
+        governance::get_admin(&env)
+    }
+
+    /// Get multisig configuration
+    pub fn gov_get_multisig_config(env: Env) -> Option<MultisigConfig> {
+        governance::get_multisig_config(&env)
+    }
+
+    /// Get guardian configuration
+    pub fn gov_get_guardian_config(env: Env) -> Option<GuardianConfig> {
+        governance::get_guardian_config(&env)
+    }
+
+    /// Get proposal approvals
+    pub fn gov_get_proposal_approvals(env: Env, proposal_id: u64) -> Option<Vec<Address>> {
+        governance::get_proposal_approvals(&env, proposal_id)
+    }
+
+    /// Get current recovery request
+    pub fn gov_get_recovery_request(env: Env) -> Option<RecoveryRequest> {
+        governance::get_recovery_request(&env)
+    }
+
+    /// Get recovery approvals
+    pub fn gov_get_recovery_approvals(env: Env) -> Option<Vec<Address>> {
+        governance::get_recovery_approvals(&env)
+    }
+
+    /// Get paginated list of proposals
+    pub fn gov_get_proposals(env: Env, start_id: u64, limit: u32) -> Vec<Proposal> {
+        governance::get_proposals(&env, start_id, limit)
+    }
+
+    /// Check if an address can vote on a proposal
+    pub fn gov_can_vote(env: Env, voter: Address, proposal_id: u64) -> bool {
+        governance::can_vote(&env, voter, proposal_id)
+    }
 }
 
 #[cfg(test)]
