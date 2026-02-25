@@ -163,7 +163,11 @@ pub fn repay_debt(
     if amount <= 0 {
         return Err(RepayError::InvalidAmount);
     }
+  
+    // Check for reentrancy
+    let _guard = crate::reentrancy::ReentrancyGuard::new(env).map_err(|_| RepayError::Reentrancy)?;
 
+    // Check if repayments are paused
     let pause_switches_key = DepositDataKey::PauseSwitches;
     if let Some(pause_map) = env
         .storage()
@@ -477,4 +481,8 @@ fn update_protocol_analytics_repay(env: &Env, amount: i128) -> Result<(), RepayE
 
     env.storage().persistent().set(&analytics_key, &analytics);
     Ok(())
+}
+
+fn log_repay(env: &Env, event: RepayEvent) {
+    emit_repay(env, event);
 }

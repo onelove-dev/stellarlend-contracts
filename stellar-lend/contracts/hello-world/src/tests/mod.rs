@@ -1,3 +1,4 @@
+pub mod access_control_regression_test;
 pub mod admin_test;
 pub mod analytics_test;
 pub mod asset_config_test;
@@ -25,5 +26,6 @@ pub mod borrow_cap_test;
 pub mod bridge_test;
 pub mod cross_contract_test;
 pub mod gov_asset_test;
+pub mod multisig_governance_execution_test;
 pub mod multisig_test;
 pub mod recovery_test;
