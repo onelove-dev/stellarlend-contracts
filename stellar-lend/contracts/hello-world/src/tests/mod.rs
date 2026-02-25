@@ -1,13 +1,4 @@
-pub mod admin_test;
-pub mod analytics_test;
-pub mod asset_config_test;
-pub mod borrow_test;
-pub mod config_test;
-pub mod deploy_test;
-pub mod edge_cases_test;
-pub mod events_test;
-pub mod integration_test;
-pub mod interest_accrual_test;
+pub mod fees_test;
 pub mod interest_rate_test;
 pub mod liquidate_test;
 pub mod oracle_test;
