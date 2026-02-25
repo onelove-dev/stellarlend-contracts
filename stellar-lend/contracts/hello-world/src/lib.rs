@@ -36,28 +36,6 @@ fn require_admin(env: &Env, caller: &Address) -> Result<(), RiskManagementError>
     }
     Ok(())
 }
-//! # StellarLend Core Contract
-//!
-//! The main entrypoint for the StellarLend lending protocol on Soroban.
-//!
-//! This contract orchestrates all protocol operations including:
-//! - **Collateral management**: deposit and withdraw collateral assets
-//! - **Borrowing**: borrow assets against deposited collateral
-//! - **Repayment**: repay debt (partial or full) with interest
-//! - **Liquidation**: liquidate undercollateralized positions
-//! - **Risk management**: configurable risk parameters and pause controls
-//! - **Interest rates**: dynamic kink-based interest rate model
-//! - **Oracle integration**: price feeds with staleness checks and fallbacks
-//! - **Flash loans**: uncollateralized single-transaction loans
-//! - **Analytics**: protocol and user reporting
-//! - **Governance**: on-chain proposal voting and execution
-
-#![allow(clippy::too_many_arguments)]
-#![allow(deprecated)]
-#![allow(unused_variables)]
-#![no_std]
-
-use soroban_sdk::{contract, contractimpl, Address, Env, Map, String, Symbol, Vec};
 
 mod admin;
 mod borrow;
@@ -278,8 +256,6 @@ impl HelloContract {
         deposit::deposit_collateral(&env, user, asset, amount)
     }
 
-    /// Withdraw assets from the protocol
-    pub fn withdraw_asset(
     /// Set native asset address (admin only). Required before using asset = None for deposit/borrow/repay.
     pub fn set_native_asset_address(
         env: Env,
@@ -749,7 +725,6 @@ pub fn ms_execute(
     pub fn get_protocol_analytics(env: Env) -> Result<crate::analytics::ProtocolMetrics, crate::analytics::AnalyticsError> {
         analytics::get_protocol_stats(&env)
     }
-}
 
     /// Initialize AMM settings (admin only)
     pub fn initialize_amm(
@@ -856,6 +831,8 @@ pub fn ms_execute(
     /// Get configuration of a specific bridge
     pub fn get_bridge_config(env: Env, network_id: u32) -> Result<BridgeConfig, BridgeError> {
         bridge::get_bridge_config(&env, network_id)
+    }
+
     /// Set a configuration value (admin only)
     ///
     /// # Arguments
