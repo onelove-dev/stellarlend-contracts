@@ -5,14 +5,15 @@ mod borrow;
 mod deposit;
 mod flash_loan;
 mod pause;
-mod withdraw;
 mod token_receiver;
+mod withdraw;
 
 use borrow::{
     borrow as borrow_cmd, deposit as borrow_deposit, get_admin as get_borrow_admin,
     get_user_collateral as get_borrow_collateral, get_user_debt as get_borrow_debt,
     initialize_borrow_settings as initialize_borrow_logic, repay as borrow_repay,
-    set_admin as set_borrow_admin, set_liquidation_threshold_bps as set_liquidation_threshold_logic,
+    set_admin as set_borrow_admin,
+    set_liquidation_threshold_bps as set_liquidation_threshold_logic,
     set_oracle as set_oracle_logic, BorrowCollateral, BorrowError, DebtPosition,
 };
 use deposit::{
@@ -35,8 +36,8 @@ use views::{
 };
 
 use withdraw::{
-    initialize_withdraw_settings as initialize_withdraw_logic, set_withdraw_paused as set_withdraw_paused_logic,
-    withdraw as withdraw_logic, WithdrawError,
+    initialize_withdraw_settings as initialize_withdraw_logic,
+    set_withdraw_paused as set_withdraw_paused_logic, withdraw as withdraw_logic, WithdrawError,
 };
 mod data_store;
 mod upgrade;
@@ -57,11 +58,11 @@ mod views_test;
 #[cfg(test)]
 mod data_store_test;
 #[cfg(test)]
+mod math_safety_test;
+#[cfg(test)]
 mod upgrade_test;
 #[cfg(test)]
 mod withdraw_test;
-#[cfg(test)]
-mod math_safety_test;
 
 #[contract]
 pub struct LendingContract;
@@ -268,8 +269,7 @@ impl LendingContract {
         amount: i128,
         params: Bytes,
     ) -> Result<(), FlashLoanError> {
-        flash_loan_logic(
-&env, receiver, asset, amount, params)
+        flash_loan_logic(&env, receiver, asset, amount, params)
     }
 
     /// Set the flash loan fee in basis points (admin only)

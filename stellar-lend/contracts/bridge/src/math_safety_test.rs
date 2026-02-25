@@ -7,7 +7,7 @@ fn test_bridge_fee_check() {
     let fee = BridgeContract::compute_fee(amount, 1000);
     // 10^30 * 1000 / 10000 = 10^29
     assert_eq!(fee, 100_000_000_000_000_000_000_000_000_000i128);
-    
+
     // Test extreme overflow
     let max_amount = i128::MAX;
     let fee_overflow = BridgeContract::compute_fee(max_amount, 1000);

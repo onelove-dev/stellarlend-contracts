@@ -286,7 +286,10 @@ impl BridgeContract {
         let fee = Self::compute_fee(amount, cfg.fee_bps);
         let net = amount - fee;
 
-        cfg.total_deposited = cfg.total_deposited.checked_add(amount).ok_or(ContractError::Overflow)?;
+        cfg.total_deposited = cfg
+            .total_deposited
+            .checked_add(amount)
+            .ok_or(ContractError::Overflow)?;
         Self::save_bridge(&env, &bridge_id, &cfg);
 
         BridgeDepositEvent {
@@ -330,7 +333,10 @@ impl BridgeContract {
             return Err(ContractError::AmountBelowMinimum);
         }
 
-        cfg.total_withdrawn = cfg.total_withdrawn.checked_add(amount).ok_or(ContractError::Overflow)?;
+        cfg.total_withdrawn = cfg
+            .total_withdrawn
+            .checked_add(amount)
+            .ok_or(ContractError::Overflow)?;
         Self::save_bridge(&env, &bridge_id, &cfg);
 
         BridgeWithdrawalEvent {

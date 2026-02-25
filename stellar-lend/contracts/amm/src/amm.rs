@@ -714,7 +714,10 @@ fn generate_callback_nonce(env: &Env, user: &Address) -> u64 {
 }
 
 /// Calculate effective price
-pub(crate) fn calculate_effective_price(amount_in: i128, amount_out: i128) -> Result<i128, AmmError> {
+pub(crate) fn calculate_effective_price(
+    amount_in: i128,
+    amount_out: i128,
+) -> Result<i128, AmmError> {
     if amount_in == 0 {
         return Err(AmmError::InvalidSwapParams);
     }
@@ -739,7 +742,10 @@ pub(crate) fn calculate_swap_fees(
 }
 
 /// Calculate minimum output with slippage
-pub(crate) fn calculate_min_output_with_slippage(amount: i128, slippage_bps: i128) -> Result<i128, AmmError> {
+pub(crate) fn calculate_min_output_with_slippage(
+    amount: i128,
+    slippage_bps: i128,
+) -> Result<i128, AmmError> {
     let slippage_factor = 10_000 - slippage_bps;
     let min_output = (amount * slippage_factor)
         .checked_div(10_000)
@@ -790,7 +796,8 @@ fn execute_amm_swap(
     // Mock implementation - in reality, this would call the AMM protocol contract
     // For now, we'll simulate a successful swap with some slippage
     let slippage_factor = 10_000 - params.slippage_tolerance;
-    let amount_out = params.amount_in
+    let amount_out = params
+        .amount_in
         .checked_mul(slippage_factor)
         .and_then(|v| v.checked_div(10_000))
         .ok_or(AmmError::Overflow)?;
