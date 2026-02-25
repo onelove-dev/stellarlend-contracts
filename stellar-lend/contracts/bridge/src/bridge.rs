@@ -1,7 +1,7 @@
 #![allow(unused_variables)]
 use soroban_sdk::{
     contract, contracterror, contractevent, contractimpl, contracttype, log, symbol_short, Address,
-    Env, String, Symbol, Vec,
+    Env, String, Symbol, Vec, I256,
 };
 
 // ── Error type ────────────────────────────────────────────────────────────────
@@ -283,8 +283,8 @@ impl BridgeContract {
             return Err(ContractError::AmountBelowMinimum);
         }
 
-        let fee = Self::compute_fee(amount, cfg.fee_bps);
-        let net = amount - fee;
+        let fee = Self::compute_fee(env.clone(), amount, cfg.fee_bps);
+        let net = amount.checked_sub(fee).ok_or(ContractError::Overflow)?;
 
         cfg.total_deposited = cfg
             .total_deposited
@@ -382,10 +382,14 @@ impl BridgeContract {
         Self::load_admin(&env)
     }
 
-    pub fn compute_fee(amount: i128, fee_bps: u64) -> i128 {
-        amount
-            .checked_mul(fee_bps as i128)
-            .and_then(|v| v.checked_div(10_000))
+    pub fn compute_fee(env: Env, amount: i128, fee_bps: u64) -> i128 {
+        let amount_256 = I256::from_i128(&env, amount);
+        let bps_256 = I256::from_i128(&env, fee_bps as i128);
+
+        amount_256
+            .mul(&bps_256)
+            .div(&I256::from_i128(&env, 10000))
+            .to_i128()
             .unwrap_or(0)
     }
 }

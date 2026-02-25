@@ -11,7 +11,7 @@
 //! Minimum collateral ratio is 150% (15,000 basis points).
 
 use crate::pause::{self, PauseType};
-use soroban_sdk::{contracterror, contractevent, contracttype, Address, Env};
+use soroban_sdk::{contracterror, contractevent, contracttype, Address, Env, I256};
 
 /// Errors that can occur during borrow operations.
 #[contracterror]
@@ -316,12 +316,17 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
     let current_time = env.ledger().timestamp();
     let time_elapsed = current_time.saturating_sub(position.last_update);
 
-    position
-        .borrowed_amount
-        .saturating_mul(INTEREST_RATE_PER_YEAR)
-        .saturating_mul(time_elapsed as i128)
-        .saturating_div(10000)
-        .saturating_div(SECONDS_PER_YEAR as i128)
+    let borrowed_256 = I256::from_i128(env, position.borrowed_amount);
+    let rate_256 = I256::from_i128(env, INTEREST_RATE_PER_YEAR);
+    let time_256 = I256::from_i128(env, time_elapsed as i128);
+
+    let interest_256 = borrowed_256
+        .mul(&rate_256)
+        .mul(&time_256)
+        .div(&I256::from_i128(env, 10000))
+        .div(&I256::from_i128(env, SECONDS_PER_YEAR as i128));
+
+    interest_256.to_i128().unwrap_or(i128::MAX)
 }
 
 fn get_debt_position(env: &Env, user: &Address) -> DebtPosition {
