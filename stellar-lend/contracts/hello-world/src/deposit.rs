@@ -56,21 +56,27 @@ pub enum DepositError {
 #[derive(Clone)]
 #[cfg_attr(test, derive(Debug, PartialEq))]
 pub enum DepositDataKey {
-    /// User collateral balances: Map<Address, I128>
+    /// User collateral balance (legacy)
+    /// Value type: i128
     CollateralBalance(Address),
-    /// Asset parameters: Map<Address, AssetParams>
+    /// Asset-specific parameters (legacy)
+    /// Value type: AssetParams
     AssetParams(Address),
-    /// Pause switches: Map<Symbol, bool>
+    /// Legacy operation pause switches: Map<Symbol, bool>
     PauseSwitches,
-    /// Admin address
+    /// Protocol admin address
+    /// Value type: Address
     Admin,
-    /// User positions: Map<Address, Position>
+    /// User's unified position tracking
+    /// Value type: Position
     Position(Address),
-    /// Protocol analytics
+    /// Global protocol analytics (TVL, aggregate borrows/deposits)
+    /// Value type: ProtocolAnalytics
     ProtocolAnalytics,
-    /// User analytics: Map<Address, UserAnalytics>
+    /// Granular per-user analytics metrics
+    /// Value type: UserAnalytics
     UserAnalytics(Address),
-    /// Activity log: Vec<Activity>
+    /// Bounded log of recent deposit activities: Vec<Activity>
     ActivityLog,
     /// Protocol reserve per asset: Map<Option<Address>, i128>
     ProtocolReserve(Option<Address>),
