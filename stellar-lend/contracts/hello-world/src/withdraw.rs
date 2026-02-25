@@ -1,11 +1,11 @@
-#![allow(unused)]
-use soroban_sdk::{contracterror, Address, Env, IntoVal, Map, Symbol, Val, Vec};
+use soroban_sdk::{contracterror, Address, Env, Map, Symbol};
 
 use crate::deposit::{
     add_activity_log, emit_analytics_updated_event, emit_position_updated_event,
-    emit_user_activity_tracked_event, update_protocol_analytics, update_user_analytics, Activity,
-    AssetParams, DepositDataKey, Position, ProtocolAnalytics, UserAnalytics,
+    emit_user_activity_tracked_event, AssetParams, DepositDataKey, Position, ProtocolAnalytics,
+    UserAnalytics,
 };
+use crate::events::{emit_withdrawal, WithdrawalEvent};
 
 /// Errors that can occur during withdraw operations
 #[contracterror]
@@ -30,9 +30,8 @@ pub enum WithdrawError {
     Undercollateralized = 8,
 }
 
-/// Minimum collateral ratio (in basis points, e.g., 15000 = 150%)
-/// This is the minimum ratio required: collateral_value / debt_value >= 1.5
-const MIN_COLLATERAL_RATIO_BPS: i128 = 15000; // 150%
+// Minimum collateral ratio is now managed by the risk_params module
+// const MIN_COLLATERAL_RATIO_BPS: i128 = 15000; // 150% (Legacy)
 
 /// Calculate collateral ratio
 /// Returns (collateral_value * collateral_factor) / (debt + interest)
@@ -108,7 +107,7 @@ fn validate_collateral_ratio_after_withdraw(
     };
 
     // Calculate total debt (debt + accrued interest)
-    let total_debt = position
+    let _total_debt = position
         .debt
         .checked_add(position.borrow_interest)
         .ok_or(WithdrawError::Overflow)?;
@@ -120,7 +119,8 @@ fn validate_collateral_ratio_after_withdraw(
         position.borrow_interest,
         collateral_factor,
     ) {
-        if new_ratio < MIN_COLLATERAL_RATIO_BPS {
+        let min_ratio = crate::risk_params::get_min_collateral_ratio(env).unwrap_or(15000);
+        if new_ratio < min_ratio {
             return Err(WithdrawError::InsufficientCollateralRatio);
         }
     } else {
@@ -282,7 +282,15 @@ pub fn withdraw_collateral(
     })?;
 
     // Emit withdraw event
-    emit_withdraw_event(env, &user, asset, amount, timestamp);
+    emit_withdrawal(
+        env,
+        WithdrawalEvent {
+            user: user.clone(),
+            asset: asset.clone(),
+            amount,
+            timestamp,
+        },
+    );
 
     // Emit position updated event
     emit_position_updated_event(env, &user, &position);
@@ -372,28 +380,4 @@ fn update_protocol_analytics_withdraw(env: &Env, amount: i128) -> Result<(), Wit
 
     env.storage().persistent().set(&analytics_key, &analytics);
     Ok(())
-}
-
-/// Emit withdraw event
-fn emit_withdraw_event(
-    env: &Env,
-    user: &Address,
-    asset: Option<Address>,
-    amount: i128,
-    timestamp: u64,
-) {
-    let topics = (Symbol::new(env, "withdraw"), user.clone());
-    let mut data: Vec<Val> = Vec::new(env);
-    data.push_back(Symbol::new(env, "user").into_val(env));
-    data.push_back(user.clone().into_val(env));
-    data.push_back(Symbol::new(env, "amount").into_val(env));
-    data.push_back(amount.into_val(env));
-    if let Some(asset_addr) = asset {
-        data.push_back(Symbol::new(env, "asset").into_val(env));
-        data.push_back(asset_addr.into_val(env));
-    }
-    data.push_back(Symbol::new(env, "timestamp").into_val(env));
-    data.push_back(timestamp.into_val(env));
-
-    env.events().publish(topics, data);
 }
