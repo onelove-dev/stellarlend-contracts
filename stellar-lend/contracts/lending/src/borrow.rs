@@ -294,7 +294,7 @@ pub fn repay(env: &Env, user: Address, asset: Address, amount: i128) -> Result<(
 }
 
 /// Validate collateral ratio meets minimum requirements
-fn validate_collateral_ratio(collateral: i128, borrow: i128) -> Result<(), BorrowError> {
+pub(crate) fn validate_collateral_ratio(collateral: i128, borrow: i128) -> Result<(), BorrowError> {
     let min_collateral = borrow
         .checked_mul(COLLATERAL_RATIO_MIN)
         .ok_or(BorrowError::Overflow)?
@@ -308,7 +308,7 @@ fn validate_collateral_ratio(collateral: i128, borrow: i128) -> Result<(), Borro
     Ok(())
 }
 
-fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
+pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
     if position.borrowed_amount == 0 {
         return 0;
     }

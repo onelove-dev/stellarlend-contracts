@@ -14,7 +14,7 @@
 
 #![allow(unused)]
 use soroban_sdk::{
-    contracterror, contractevent, contracttype, Address, Env, IntoVal, Map, Symbol, Val, Vec,
+    contracterror, contractevent, contracttype, Address, Env, IntoVal, Map, Symbol, Val, Vec, I256,
 };
 
 /// Errors that can occur during AMM operations
@@ -714,21 +714,21 @@ fn generate_callback_nonce(env: &Env, user: &Address) -> u64 {
 }
 
 /// Calculate effective price
-fn calculate_effective_price(amount_in: i128, amount_out: i128) -> Result<i128, AmmError> {
+pub(crate) fn calculate_effective_price(amount_in: i128, amount_out: i128) -> Result<i128, AmmError> {
     if amount_in == 0 {
         return Err(AmmError::InvalidSwapParams);
     }
 
-    // Price = (amount_out / amount_in) * 10^18 for precision
-    let price = (amount_out * 1_000_000_000_000_000_000i128)
-        .checked_div(amount_in)
+    let price = amount_out
+        .checked_mul(1_000_000_000_000_000_000i128)
+        .and_then(|v| v.checked_div(amount_in))
         .ok_or(AmmError::Overflow)?;
 
     Ok(price)
 }
 
 /// Calculate swap fees
-fn calculate_swap_fees(
+pub(crate) fn calculate_swap_fees(
     protocol_config: &AmmProtocolConfig,
     amount_in: i128,
 ) -> Result<i128, AmmError> {
@@ -739,7 +739,7 @@ fn calculate_swap_fees(
 }
 
 /// Calculate minimum output with slippage
-fn calculate_min_output_with_slippage(amount: i128, slippage_bps: i128) -> Result<i128, AmmError> {
+pub(crate) fn calculate_min_output_with_slippage(amount: i128, slippage_bps: i128) -> Result<i128, AmmError> {
     let slippage_factor = 10_000 - slippage_bps;
     let min_output = (amount * slippage_factor)
         .checked_div(10_000)
@@ -790,8 +790,9 @@ fn execute_amm_swap(
     // Mock implementation - in reality, this would call the AMM protocol contract
     // For now, we'll simulate a successful swap with some slippage
     let slippage_factor = 10_000 - params.slippage_tolerance;
-    let amount_out = (params.amount_in * slippage_factor)
-        .checked_div(10_000)
+    let amount_out = params.amount_in
+        .checked_mul(slippage_factor)
+        .and_then(|v| v.checked_div(10_000))
         .ok_or(AmmError::Overflow)?;
 
     // Validate callback (this would be called by the AMM protocol)

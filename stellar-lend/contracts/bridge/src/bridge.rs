@@ -22,6 +22,7 @@ pub enum ContractError {
     NegativeMinAmount = 10,
     AmountNotPositive = 11,
     AmountBelowMinimum = 12,
+    Overflow = 13,
 }
 
 #[contractevent]
@@ -285,7 +286,7 @@ impl BridgeContract {
         let fee = Self::compute_fee(amount, cfg.fee_bps);
         let net = amount - fee;
 
-        cfg.total_deposited += amount;
+        cfg.total_deposited = cfg.total_deposited.checked_add(amount).ok_or(ContractError::Overflow)?;
         Self::save_bridge(&env, &bridge_id, &cfg);
 
         BridgeDepositEvent {
@@ -329,7 +330,7 @@ impl BridgeContract {
             return Err(ContractError::AmountBelowMinimum);
         }
 
-        cfg.total_withdrawn += amount;
+        cfg.total_withdrawn = cfg.total_withdrawn.checked_add(amount).ok_or(ContractError::Overflow)?;
         Self::save_bridge(&env, &bridge_id, &cfg);
 
         BridgeWithdrawalEvent {
@@ -376,6 +377,9 @@ impl BridgeContract {
     }
 
     pub fn compute_fee(amount: i128, fee_bps: u64) -> i128 {
-        amount * fee_bps as i128 / 10_000
+        amount
+            .checked_mul(fee_bps as i128)
+            .and_then(|v| v.checked_div(10_000))
+            .unwrap_or(0)
     }
 }
