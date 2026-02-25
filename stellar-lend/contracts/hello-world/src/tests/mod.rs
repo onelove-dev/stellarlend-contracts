@@ -23,3 +23,4 @@ pub mod views_test;
 pub mod bridge_test;
 pub mod recovery_test;
 pub mod multisig_test;
+pub mod multisig_governance_execution_test;

@@ -1,6 +1,4 @@
 
-<<<<<<< test/fee-collection-tests
-=======
 /// Helper function to create a test environment
 fn create_test_env() -> Env {
     let env = Env::default();
@@ -5401,7 +5399,6 @@ fn test_monitoring_protocol_state_over_time() {
 }
 
 /// Test monitoring risk level changes
->>>>>>> main
 #[test]
 fn test_placeholder() {
     // Legacy helper file. 

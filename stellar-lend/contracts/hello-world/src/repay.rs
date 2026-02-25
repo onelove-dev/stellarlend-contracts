@@ -167,9 +167,6 @@ pub fn repay_debt(
 
     let timestamp = env.ledger().timestamp();
 
-    if let Some(ref asset_addr) = asset {
-        if asset_addr == &env.current_contract_address() {
-            return Err(RepayError::InvalidAsset);
     // Determine the asset contract address to use
     let asset_addr = match &asset {
         Some(addr) => {
@@ -205,20 +202,6 @@ pub fn repay_debt(
     let total_debt = position.debt.checked_add(position.borrow_interest).ok_or(RepayError::Overflow)?;
     let repay_amount = if amount >= total_debt { total_debt } else { amount };
 
-    if let Some(ref asset_addr) = asset {
-        #[cfg(not(test))]
-        {
-            let token_client = soroban_sdk::token::Client::new(env, asset_addr);
-            let user_balance = token_client.balance(&user);
-            if user_balance < repay_amount {
-                return Err(RepayError::InsufficientBalance);
-            }
-            token_client.transfer_from(&env.current_contract_address(), &user, &env.current_contract_address(), &repay_amount);
-        }
-    }
-
-    let interest_paid = if repay_amount <= position.borrow_interest { repay_amount } else { position.borrow_interest };
-    let principal_paid = repay_amount.checked_sub(interest_paid).ok_or(RepayError::Overflow)?;
     // Handle asset transfer - user pays the contract
     // We use the determined asset_addr (either token or native)
     let token_client = soroban_sdk::token::Client::new(env, &asset_addr);
@@ -251,13 +234,6 @@ pub fn repay_debt(
         .ok_or(RepayError::Overflow)?;
 
     // Update position
-    position.borrow_interest = position
-        .borrow_interest
-        .checked_sub(interest_paid)
-        .unwrap_or(0); // Should not underflow, but handle gracefully
-
-    position.debt = position.debt.checked_sub(principal_paid).unwrap_or(0); // Should not underflow, but handle gracefully
-
     position.borrow_interest = position.borrow_interest.checked_sub(interest_paid).unwrap_or(0);
     position.debt = position.debt.checked_sub(principal_paid).unwrap_or(0);
     position.last_accrual_time = timestamp;
@@ -275,8 +251,6 @@ pub fn repay_debt(
 
     update_user_analytics_repay(env, &user, repay_amount, timestamp)?;
     update_protocol_analytics_repay(env, repay_amount)?;
-    add_activity_log(env, &user, Symbol::new(env, "repay"), repay_amount, asset.clone(), timestamp).map_err(|e| RepayError::Overflow)?;
-    log_repay(env, RepayEvent { user: user.clone(), asset: asset.clone(), amount: repay_amount, timestamp });
 
     // Add to activity log
     add_activity_log(
@@ -312,7 +286,6 @@ pub fn repay_debt(
     Ok((remaining_debt, interest_paid, principal_paid))
 }
 
-fn update_user_analytics_repay(env: &Env, user: &Address, amount: i128, timestamp: u64) -> Result<(), RepayError> {
 /// Update user analytics after repayment
 ///
 /// # Arguments
@@ -355,10 +328,6 @@ fn update_user_analytics_repay(
     Ok(())
 }
 
-fn update_protocol_analytics_repay(env: &Env, amount: i128) -> Result<(), RepayError> {
-    let analytics_key = DepositDataKey::ProtocolAnalytics;
-    let mut analytics = env.storage().persistent().get::<DepositDataKey, ProtocolAnalytics>(&analytics_key)
-        .unwrap_or(ProtocolAnalytics { total_deposits: 0, total_borrows: 0, total_value_locked: 0 });
 /// Update protocol analytics after repayment
 ///
 /// # Arguments
@@ -384,4 +353,8 @@ fn update_protocol_analytics_repay(env: &Env, amount: i128) -> Result<(), RepayE
 
     env.storage().persistent().set(&analytics_key, &analytics);
     Ok(())
+}
+
+fn log_repay(env: &Env, event: RepayEvent) {
+    emit_repay(env, event);
 }
