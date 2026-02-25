@@ -478,3 +478,7 @@ fn update_protocol_analytics_repay(env: &Env, amount: i128) -> Result<(), RepayE
     env.storage().persistent().set(&analytics_key, &analytics);
     Ok(())
 }
+
+fn log_repay(env: &Env, event: RepayEvent) {
+    emit_repay(env, event);
+}
