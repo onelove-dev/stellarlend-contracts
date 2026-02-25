@@ -1,6 +1,6 @@
 #![allow(unused_variables)]
 
-use soroban_sdk::{token::TokenClient, Address, Env, String, Vec};
+use soroban_sdk::{token::TokenClient, Address, Env, String, Symbol, Val, Vec};
 
 use crate::errors::GovernanceError;
 use crate::storage::{GovernanceDataKey, GuardianConfig};
@@ -424,14 +424,55 @@ pub fn execute_proposal(
     Ok(())
 }
 
-fn execute_proposal_type(_env: &Env, proposal_type: &ProposalType) -> Result<(), GovernanceError> {
+fn execute_proposal_type(env: &Env, proposal_type: &ProposalType) -> Result<(), GovernanceError> {
     match proposal_type {
-        ProposalType::MinCollateralRatio(_)
-        | ProposalType::RiskParams(_, _, _, _)
-        | ProposalType::PauseSwitch(_, _)
-        | ProposalType::EmergencyPause(_)
-        | ProposalType::GenericAction(_) => Ok(()),
+        ProposalType::MinCollateralRatio(val) => {
+            crate::risk_params::set_risk_params(env, Some(*val), None, None, None)
+                .map_err(|_| GovernanceError::ExecutionFailed)?;
+        }
+        ProposalType::RiskParams(min_cr, liq_threshold, close_factor, liq_incentive) => {
+            crate::risk_params::set_risk_params(
+                env,
+                *min_cr,
+                *liq_threshold,
+                *close_factor,
+                *liq_incentive,
+            )
+            .map_err(|_| GovernanceError::ExecutionFailed)?;
+        }
+        ProposalType::AssetConfigUpdate(asset, cf, lt, ms, mb, cc, cb) => {
+            crate::cross_asset::update_asset_config(
+                env,
+                asset.clone(),
+                *cf,
+                *lt,
+                *ms,
+                *mb,
+                *cc,
+                *cb,
+            )
+            .map_err(|_| GovernanceError::ExecutionFailed)?;
+        }
+        ProposalType::PauseSwitch(op, paused) => {
+            let admin = env.current_contract_address();
+            crate::risk_management::set_pause_switch(env, admin, op.clone(), *paused)
+                .map_err(|_| GovernanceError::ExecutionFailed)?;
+        }
+        ProposalType::EmergencyPause(paused) => {
+            let admin = env.current_contract_address();
+            crate::risk_management::set_emergency_pause(env, admin, *paused)
+                .map_err(|_| GovernanceError::ExecutionFailed)?;
+        }
+        ProposalType::GenericAction(action) => {
+            execute_generic_action(env, action)?;
+        }
     }
+    Ok(())
+}
+
+fn execute_generic_action(env: &Env, action: &Action) -> Result<(), GovernanceError> {
+    env.invoke_contract::<Val>(&action.target, &action.method, action.args.clone());
+    Ok(())
 }
 
 // ========================================================================

@@ -1,5 +1,4 @@
 pub mod admin_test;
-pub mod test_helpers;
 pub mod analytics_test;
 pub mod asset_config_test;
 pub mod config_test;
@@ -15,12 +14,16 @@ pub mod pause_test;
 pub mod risk_params_test;
 pub mod security_test;
 pub mod test;
+pub mod test_helpers;
 pub mod withdraw_test;
 // Cross-asset tests disabled - contract methods not yet implemented
 pub mod views_test;
 // Cross-asset tests re-enabled when contract exposes full CA API (try_* return Result; get_user_asset_position; try_ca_repay_debt)
 // pub mod test_cross_asset;
+pub mod amm_impact_test;
+pub mod borrow_cap_test;
 pub mod bridge_test;
-pub mod recovery_test;
-pub mod multisig_test;
 pub mod cross_contract_test;
+pub mod gov_asset_test;
+pub mod multisig_test;
+pub mod recovery_test;

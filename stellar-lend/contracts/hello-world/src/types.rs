@@ -33,6 +33,16 @@ pub enum ProposalType {
     MinCollateralRatio(i128),
     /// Change risk parameters (min_cr, liq_threshold, close_factor, liq_incentive)
     RiskParams(Option<i128>, Option<i128>, Option<i128>, Option<i128>),
+    /// Update asset configuration (asset, collateral_factor, liquidation_threshold, max_supply, max_borrow, can_collateralize, can_borrow)
+    AssetConfigUpdate(
+        Option<Address>,
+        Option<i128>,
+        Option<i128>,
+        Option<i128>,
+        Option<i128>,
+        Option<bool>,
+        Option<bool>,
+    ),
     /// Pause/unpause operation
     PauseSwitch(Symbol, bool),
     /// Emergency pause
@@ -142,7 +152,7 @@ pub struct RecoveryRequest {
 pub struct Action {
     pub target: Address,
     pub method: Symbol,
-    pub args: Vec<Bytes>,
+    pub args: Vec<Val>,
     pub value: i128,
 }
 
