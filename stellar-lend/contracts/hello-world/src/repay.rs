@@ -163,7 +163,11 @@ pub fn repay_debt(
     if amount <= 0 {
         return Err(RepayError::InvalidAmount);
     }
+  
+    // Check for reentrancy
+    let _guard = crate::reentrancy::ReentrancyGuard::new(env).map_err(|_| RepayError::Reentrancy)?;
 
+    // Check if repayments are paused
     let pause_switches_key = DepositDataKey::PauseSwitches;
     if let Some(pause_map) = env
         .storage()

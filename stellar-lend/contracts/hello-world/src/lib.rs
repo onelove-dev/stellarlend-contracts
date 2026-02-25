@@ -105,6 +105,8 @@ use bridge::{
 mod liquidate;
 use liquidate::liquidate;
 
+pub mod reentrancy;
+
 mod interest_rate;
 #[allow(unused_imports)]
 use interest_rate::{
@@ -129,6 +131,7 @@ use crate::types::{
 /// Provides the public API for all lending protocol operations. Each method
 /// delegates to the corresponding module implementation and converts internal
 /// errors into panics for Soroban's contract-call semantics.
+
 #[contract]
 pub struct HelloContract;
 
@@ -1487,6 +1490,9 @@ pub fn ms_execute(
 
 #[cfg(test)]
 mod test;
+
+#[cfg(test)]
+mod test_reentrancy;
 
 #[cfg(test)]
 mod test_zero_amount;
