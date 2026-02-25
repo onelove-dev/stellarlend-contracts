@@ -63,7 +63,7 @@ fn get_asset_price(env: &Env, oracle: &Address, asset: &Address) -> i128 {
 /// Computes collateral value in common unit (amount * price / PRICE_SCALE).
 /// Returns 0 if oracle is not set or amount is zero.
 #[inline]
-fn collateral_value(env: &Env, collateral: &BorrowCollateral) -> i128 {
+pub(crate) fn collateral_value(env: &Env, collateral: &BorrowCollateral) -> i128 {
     if collateral.amount <= 0 {
         return 0;
     }
@@ -84,7 +84,7 @@ fn collateral_value(env: &Env, collateral: &BorrowCollateral) -> i128 {
 /// Computes debt value in common unit (total debt * price / PRICE_SCALE).
 /// Returns 0 if oracle is not set or debt is zero.
 #[inline]
-fn debt_value(env: &Env, position: &DebtPosition) -> i128 {
+pub(crate) fn debt_value(env: &Env, position: &DebtPosition) -> i128 {
     let total_debt = position
         .borrowed_amount
         .checked_add(position.interest_accrued)
@@ -113,7 +113,7 @@ fn debt_value(env: &Env, position: &DebtPosition) -> i128 {
 /// Returns `HEALTH_FACTOR_NO_DEBT` when debt is zero (position is healthy).
 /// Returns 0 when oracle is not set but user has debt (cannot compute).
 #[inline]
-fn compute_health_factor(
+pub(crate) fn compute_health_factor(
     env: &Env,
     collateral_value: i128,
     debt_value: i128,

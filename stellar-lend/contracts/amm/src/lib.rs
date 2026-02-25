@@ -289,3 +289,5 @@ impl AmmContract {
 mod liquidate_test;
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+mod math_safety_test;
