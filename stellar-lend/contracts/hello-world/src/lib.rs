@@ -22,6 +22,8 @@ use repay::repay_debt;
 mod borrow;
 use borrow::borrow_asset;
 
+pub mod reentrancy;
+
 #[contract]
 pub struct HelloContract;
 
@@ -364,3 +366,6 @@ impl HelloContract {
 
 #[cfg(test)]
 mod test;
+
+#[cfg(test)]
+mod test_reentrancy;

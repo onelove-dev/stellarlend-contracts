@@ -173,6 +173,9 @@ pub fn deposit_collateral(
         return Err(DepositError::InvalidAmount);
     }
 
+    // Check for reentrancy
+    let _guard = crate::reentrancy::ReentrancyGuard::new(env).map_err(|_| DepositError::Reentrancy)?;
+
     // Check if deposits are paused
     // Note: The risk management system provides pause functionality through the public API.
     // This check maintains backward compatibility with the old pause switch system.
