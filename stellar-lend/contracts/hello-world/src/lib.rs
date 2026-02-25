@@ -1486,7 +1486,10 @@ pub fn ms_execute(
 }
 
 #[cfg(test)]
-mod tests;
+mod test;
+
+#[cfg(test)]
+mod test_zero_amount;
 
 #[cfg(test)]
 mod flash_loan_test;
