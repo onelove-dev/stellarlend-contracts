@@ -446,10 +446,6 @@ pub fn borrow_asset(
         _ => BorrowError::Overflow,
     })?;
 
-<<<<<<< test/fee-collection-tests
-    // Emit events
-    log_borrow(env, BorrowEvent { user: user.clone(), asset: asset.clone(), amount, timestamp });
-=======
     // Emit borrow event
     emit_borrow(
         env,
@@ -462,7 +458,6 @@ pub fn borrow_asset(
     );
 
     // Emit position updated event
->>>>>>> main
     emit_position_updated_event(env, &user, &position);
     emit_analytics_updated_event(env, &user, "borrow", amount, timestamp);
     emit_user_activity_tracked_event(env, &user, Symbol::new(env, "borrow"), amount, timestamp);
