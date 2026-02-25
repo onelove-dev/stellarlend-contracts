@@ -134,28 +134,6 @@ pub struct HelloContract;
 
 #[contractimpl]
 impl HelloContract {
-    /// Initialize the contract with an admin address
-    pub fn initialize(env: Env, admin: Address) {
-        let admin_key = DepositDataKey::Admin;
-        if env.storage().persistent().has(&admin_key) {
-            panic!("Already initialized");
-        }
-        env.storage().persistent().set(&admin_key, &admin);
-
-        // Initialize protocol analytics
-        let analytics_key = DepositDataKey::ProtocolAnalytics;
-        let analytics = ProtocolAnalytics {
-            total_deposits: 0,
-            total_borrows: 0,
-            total_value_locked: 0,
-        };
-        env.storage().persistent().set(&analytics_key, &analytics);
-
-        // Initialize other modules
-        interest_rate::initialize_interest_rate_config(&env, admin.clone()).unwrap();
-        risk_management::initialize_risk_management(&env, admin).unwrap();
-    }
-
     /// Deposit assets into the protocol
     /// Health-check endpoint.
     ///
@@ -1508,7 +1486,10 @@ pub fn ms_execute(
 }
 
 #[cfg(test)]
-mod tests;
+mod test;
+
+#[cfg(test)]
+mod test_zero_amount;
 
 #[cfg(test)]
 mod flash_loan_test;
