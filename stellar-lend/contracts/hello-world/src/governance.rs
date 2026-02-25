@@ -560,12 +560,58 @@ pub fn set_multisig_config(
         .instance()
         .set(&GovernanceDataKey::MultisigConfig, &config);
 
-    Ok(())
+/// Return the list of admins who have approved a proposal, or `None` if not found.
+pub fn get_proposal_approvals(env: &Env, proposal_id: u64) -> Option<Vec<Address>> {
+    let approvals_key = GovernanceDataKey::ProposalApprovals(proposal_id);
+    env.storage().persistent().get(&approvals_key)
 }
 
-// ========================================================================
-// Social Recovery
-// ========================================================================
+// ============================================================================
+// Events
+// ============================================================================
+
+fn emit_proposal_created_event(env: &Env, proposal_id: &u64, proposer: &Address) {
+    let topics = (
+        Symbol::new(env, "proposal_created"),
+        *proposal_id,
+        proposer.clone(),
+    );
+    env.events().publish(topics, ());
+}
+
+fn emit_vote_cast_event(
+    env: &Env,
+    proposal_id: &u64,
+    voter: &Address,
+    vote: &Vote,
+    voting_power: &i128,
+) {
+    let topics = (Symbol::new(env, "vote_cast"), *proposal_id, voter.clone());
+    env.events().publish(topics, (vote.clone(), *voting_power));
+}
+
+pub fn emit_proposal_executed_event(env: &Env, proposal_id: &u64, executor: &Address) {
+    let topics = (
+        Symbol::new(env, "proposal_executed"),
+        *proposal_id,
+        executor.clone(),
+    );
+    env.events().publish(topics, ());
+}
+
+fn emit_proposal_failed_event(env: &Env, proposal_id: &u64) {
+    let topics = (Symbol::new(env, "proposal_failed"), *proposal_id);
+    env.events().publish(topics, ());
+}
+
+pub fn emit_approval_event(env: &Env, proposal_id: &u64, approver: &Address) {
+    let topics = (
+        Symbol::new(env, "proposal_approved"),
+        *proposal_id,
+        approver.clone(),
+    );
+    env.events().publish(topics, ());
+}
 
 pub fn add_guardian(env: &Env, caller: Address, guardian: Address) -> Result<(), GovernanceError> {
     caller.require_auth();
@@ -891,77 +937,45 @@ pub fn get_multisig_config(env: &Env) -> Option<MultisigConfig> {
         .get(&GovernanceDataKey::MultisigConfig)
 }
 
-pub fn get_guardian_config(env: &Env) -> Option<GuardianConfig> {
-    env.storage()
-        .instance()
-        .get(&GovernanceDataKey::GuardianConfig)
+pub fn emit_guardian_added_event(env: &Env, guardian: &Address) {
+    let topics = (Symbol::new(env, "guardian_added"), guardian.clone());
+    env.events().publish(topics, ());
 }
 
-pub fn get_proposal_approvals(env: &Env, proposal_id: u64) -> Option<Vec<Address>> {
-    env.storage()
-        .persistent()
-        .get(&GovernanceDataKey::ProposalApprovals(proposal_id))
+pub fn emit_guardian_removed_event(env: &Env, guardian: &Address) {
+    let topics = (Symbol::new(env, "guardian_removed"), guardian.clone());
+    env.events().publish(topics, ());
 }
 
-pub fn get_recovery_request(env: &Env) -> Option<RecoveryRequest> {
-    env.storage()
-        .persistent()
-        .get(&GovernanceDataKey::RecoveryRequest)
+pub fn emit_recovery_started_event(
+    env: &Env,
+    old_admin: &Address,
+    new_admin: &Address,
+    initiator: &Address,
+) {
+    let topics = (
+        Symbol::new(env, "recovery_started"),
+        old_admin.clone(),
+        new_admin.clone(),
+    );
+    env.events().publish(topics, initiator.clone());
 }
 
-pub fn get_recovery_approvals(env: &Env) -> Option<Vec<Address>> {
-    env.storage()
-        .persistent()
-        .get(&GovernanceDataKey::RecoveryApprovals)
+pub fn emit_recovery_approved_event(env: &Env, approver: &Address) {
+    let topics = (Symbol::new(env, "recovery_approved"), approver.clone());
+    env.events().publish(topics, ());
 }
 
-pub fn get_proposals(env: &Env, start_id: u64, limit: u32) -> Vec<Proposal> {
-    let mut proposals = Vec::new(env);
-    let max_id: u64 = env
-        .storage()
-        .instance()
-        .get(&GovernanceDataKey::NextProposalId)
-        .unwrap_or(0);
-
-    let end_id = (start_id + limit as u64).min(max_id);
-
-    for id in start_id..end_id {
-        if let Some(proposal) = get_proposal(env, id) {
-            proposals.push_back(proposal);
-        }
-    }
-
-    proposals
-}
-
-pub fn can_vote(env: &Env, voter: Address, proposal_id: u64) -> bool {
-    if env
-        .storage()
-        .persistent()
-        .has(&GovernanceDataKey::Vote(proposal_id, voter.clone()))
-    {
-        return false;
-    }
-
-    let proposal = match get_proposal(env, proposal_id) {
-        Some(p) => p,
-        None => return false,
-    };
-
-    let now = env.ledger().timestamp();
-
-    let is_active = proposal.status == ProposalStatus::Active
-        || (proposal.status == ProposalStatus::Pending && now >= proposal.start_time);
-
-    if !is_active || now > proposal.end_time {
-        return false;
-    }
-
-    let config = match get_config(env) {
-        Some(c) => c,
-        None => return false,
-    };
-
-    let token_client = TokenClient::new(env, &config.vote_token);
-    token_client.balance(&voter) > 0
+pub fn emit_recovery_executed_event(
+    env: &Env,
+    old_admin: &Address,
+    new_admin: &Address,
+    executor: &Address,
+) {
+    let topics = (
+        Symbol::new(env, "recovery_executed"),
+        old_admin.clone(),
+        new_admin.clone(),
+    );
+    env.events().publish(topics, executor.clone());
 }

@@ -68,6 +68,8 @@ mod repay;
 mod risk_management;
 mod risk_params;
 mod withdraw;
+pub mod recovery;
+pub mod multisig;
 
 use borrow::borrow_asset;
 use deposit::deposit_collateral;
@@ -325,8 +327,82 @@ impl HelloContract {
         })
     }
 
-    /// Borrow assets from the protocol
-    pub fn borrow_asset(
+
+    pub fn set_guardians(
+    env: Env,
+    caller: Address,
+    guardians: soroban_sdk::Vec<Address>,
+    threshold: u32,
+) -> Result<(), governance::GovernanceError> {
+    recovery::set_guardians(&env, caller, guardians, threshold)
+}
+
+pub fn start_recovery(
+    env: Env,
+    initiator: Address,
+    old_admin: Address,
+    new_admin: Address,
+) -> Result<(), governance::GovernanceError> {
+    recovery::start_recovery(&env, initiator, old_admin, new_admin)
+}
+
+pub fn approve_recovery(
+    env: Env,
+    approver: Address,
+) -> Result<(), governance::GovernanceError> {
+    recovery::approve_recovery(&env, approver)
+}
+
+pub fn execute_recovery(
+    env: Env,
+    executor: Address,
+) -> Result<(), governance::GovernanceError> {
+    recovery::execute_recovery(&env, executor)
+}
+
+pub fn ms_set_admins(
+    env: Env,
+    caller: Address,
+    admins: soroban_sdk::Vec<Address>,
+    threshold: u32,
+) -> Result<(), governance::GovernanceError> {
+    multisig::ms_set_admins(&env, caller, admins, threshold)
+}
+
+pub fn ms_propose_set_min_cr(
+    env: Env,
+    proposer: Address,
+    new_ratio: i128,
+) -> Result<u64, governance::GovernanceError> {
+    multisig::ms_propose_set_min_cr(&env, proposer, new_ratio)
+}
+
+pub fn ms_approve(
+    env: Env,
+    approver: Address,
+    proposal_id: u64,
+) -> Result<(), governance::GovernanceError> {
+    multisig::ms_approve(&env, approver, proposal_id)
+}
+
+pub fn ms_execute(
+    env: Env,
+    executor: Address,
+    proposal_id: u64,
+) -> Result<(), governance::GovernanceError> {
+    multisig::ms_execute(&env, executor, proposal_id)
+}
+
+    /// Set pause switch for an operation (admin only)
+    ///
+    /// # Arguments
+    /// * `caller` - The caller address (must be admin)
+    /// * `operation` - The operation symbol (e.g., "pause_deposit", "pause_borrow")
+    /// * `paused` - Whether to pause (true) or unpause (false)
+    ///
+    /// # Returns
+    /// Returns Ok(()) on success
+    pub fn set_pause_switch(
         env: Env,
         user: Address,
         asset: Option<Address>,
